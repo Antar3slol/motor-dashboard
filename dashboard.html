@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Motor Vibration Dashboard - Real-time Monitoring</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px; min-height: 100vh;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 30px; }
+    h1 { color: white; font-size: 2.5em; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); margin-bottom: 10px; }
+    .subtitle { color: rgba(255,255,255,0.9); font-size: 1.1em; }
+    .connection-status {
+      background: rgba(255,255,255,0.2); color: white; padding: 12px 24px;
+      border-radius: 25px; display: inline-flex; align-items: center; gap: 10px;
+      margin-top: 15px; font-size: 1em; backdrop-filter: blur(10px);
+    }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; animation: pulse 2s infinite; }
+    .status-online { background: #4CAF50; }
+    .status-offline { background: #F44336; animation: none; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.1); }
+    }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 20px; }
+    .metric-card {
+      background: white; border-radius: 15px; padding: 25px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .metric-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,0,0,0.3); }
+    .metric-label { font-size: 0.9em; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+    .metric-value {
+      font-size: 3em; font-weight: bold; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 5px;
+    }
+    .metric-unit { font-size: 1em; color: #999; }
+    .zone-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; }
+    .zone-indicator {
+      display: inline-block; padding: 15px 40px; border-radius: 30px;
+      font-size: 1.8em; font-weight: bold; margin: 15px 0; transition: all 0.3s ease;
+    }
+    .zone-A { background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4); }
+    .zone-B { background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; box-shadow: 0 5px 15px rgba(33, 150, 243, 0.4); }
+    .zone-C { background: linear-gradient(135deg, #FFC107 0%, #FFA000 100%); color: white; box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4); }
+    .zone-D { background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%); color: white; box-shadow: 0 5px 15px rgba(244, 67, 54, 0.4); animation: alertPulse 1s infinite; }
+    @keyframes alertPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    .zone-description { font-size: 1.1em; color: #666; margin-top: 10px; }
+    .zone-icon { font-size: 3em; margin-bottom: 10px; }
+    .chart-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; }
+    .chart-title { font-size: 1.3em; font-weight: bold; color: #333; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+    .chart-container { position: relative; height: 350px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
+    .stat-box { background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 15px; border-radius: 10px; text-align: center; }
+    .stat-label { font-size: 0.85em; color: #666; margin-bottom: 5px; }
+    .stat-value { font-size: 1.5em; font-weight: bold; color: #667eea; }
+    .last-update { text-align: center; color: rgba(255,255,255,0.8); margin-top: 20px; font-size: 0.95em; }
+    .machine-class-selector { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; }
+    .selector-title { font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+    .class-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .class-btn { background: white; border: 2px solid #e0e0e0; border-radius: 12px; padding: 15px; cursor: pointer; transition: all 0.3s ease; text-align: left; }
+    .class-btn:hover { border-color: #667eea; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2); }
+    .class-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color: #667eea; color: white; box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+    .class-btn-title { font-size: 1.1em; font-weight: bold; margin-bottom: 5px; }
+    .class-btn.active .class-btn-title { color: white; }
+    .class-btn-desc { font-size: 0.85em; color: #666; line-height: 1.4; }
+    .class-btn.active .class-btn-desc { color: rgba(255,255,255,0.9); }
+    .class-btn-zones { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1); font-size: 0.8em; }
+    .class-btn.active .class-btn-zones { border-top-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.85); }
+    .zone-range { display: flex; justify-content: space-between; margin-top: 3px; }
+    .current-class-info { background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 15px; border-radius: 10px; margin-top: 15px; font-size: 0.9em; }
+    .current-class-info strong { color: #667eea; }
+    @media (max-width: 768px) {
+      h1 { font-size: 1.8em; } .metric-value { font-size: 2.2em; }
+      .zone-indicator { font-size: 1.4em; padding: 12px 30px; } .chart-container { height: 250px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔧 ระบบวัดความสั่นมอเตอร์อัจฉริยะ</h1>
+      <p class="subtitle">Smart Motor Vibration Monitoring System</p>
+      <div class="connection-status">
+        <span class="status-dot status-offline" id="statusDot"></span>
+        <span id="connectionStatus">กำลังเชื่อมต่อ...</span>
+      </div>
+    </div>
+    
+    <div class="machine-class-selector">
+      <div class="selector-title">
+        <span>⚙️</span>
+        <span>เลือกสเปคเครื่องจักร (ISO 10816-3)</span>
+      </div>
+      <div class="class-buttons" id="classButtons"></div>
+      <div class="current-class-info" id="currentClassInfo"></div>
+    </div>
+    
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">⚡ ความเร็วการสั่น</div>
+        <div class="metric-value" id="vrmsValue">0.00</div>
+        <div class="metric-unit">mm/s (Velocity RMS)</div>
+      </div>
+      
+      <div class="zone-card">
+        <div class="metric-label">📊 สถานะเครื่องจักร</div>
+        <div class="zone-icon" id="zoneIcon">✓</div>
+        <div class="zone-indicator zone-A" id="zoneIndicator">Zone A</div>
+        <div class="zone-description" id="zoneDescription">สภาพดีเยี่ยม</div>
+      </div>
+    </div>
+    
+    <div class="chart-card">
+      <div class="chart-title">
+        <span>📈</span>
+        <span>กราฟความสั่นสะเทือนแบบเรียลไทม์</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="vibrationChart"></canvas>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label">ค่าต่ำสุด</div>
+          <div class="stat-value" id="minValue">0.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">ค่าสูงสุด</div>
+          <div class="stat-value" id="maxValue">0.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">ค่าเฉลี่ย</div>
+          <div class="stat-value" id="avgValue">0.00</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">จุดข้อมูล</div>
+          <div class="stat-value" id="dataCount">0</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="last-update">
+      อัปเดตล่าสุด: <span id="lastUpdate">-</span>
+    </div>
+  </div>
+
+  <script>
+    const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const WS_URL = `${WS_PROTOCOL}//${window.location.host}`;
+    
+    let chart;
+    let dataPoints = [];
+    const MAX_POINTS = 50;
+    let ws;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    
+    let machineClasses = {
+      class1: {
+        name: 'Class I',
+        description: 'เครื่องจักรขนาดเล็ก (< 15 kW)',
+        zones: {
+          A: { max: 2.8, description: 'สภาพดีเยี่ยม' },
+          B: { max: 7.1, description: 'ยอมรับได้' },
+          C: { max: 11.2, description: 'ไม่น่าพอใจ' },
+          D: { max: Infinity, description: 'อันตราย' }
+        }
+      },
+      class2: {
+        name: 'Class II',
+        description: 'เครื่องจักรขนาดกลาง (15-75 kW)',
+        zones: {
+          A: { max: 4.5, description: 'สภาพดีเยี่ยม' },
+          B: { max: 11.2, description: 'ยอมรับได้' },
+          C: { max: 18.0, description: 'ไม่น่าพอใจ' },
+          D: { max: Infinity, description: 'อันตราย' }
+        }
+      },
+      class3: {
+        name: 'Class III',
+        description: 'เครื่องจักรขนาดใหญ่ (> 75 kW, Rigid Foundation)',
+        zones: {
+          A: { max: 7.1, description: 'สภาพดีเยี่ยม' },
+          B: { max: 18.0, description: 'ยอมรับได้' },
+          C: { max: 28.0, description: 'ไม่น่าพอใจ' },
+          D: { max: Infinity, description: 'อันตราย' }
+        }
+      },
+      class4: {
+        name: 'Class IV',
+        description: 'เครื่องจักรขนาดใหญ่ (> 75 kW, Flexible Foundation)',
+        zones: {
+          A: { max: 11.2, description: 'สภาพดีเยี่ยม' },
+          B: { max: 28.0, description: 'ยอมรับได้' },
+          C: { max: 45.0, description: 'ไม่น่าพอใจ' },
+          D: { max: Infinity, description: 'อันตราย' }
+        }
+      }
+    };
+    let currentMachineClass = 'class2';
+    
+    const zoneConfig = {
+      'A': { icon: '✓', text: 'สภาพดีเยี่ยม', color: '#4CAF50' },
+      'B': { icon: '⚠', text: 'ยอมรับได้', color: '#2196F3' },
+      'C': { icon: '⚠', text: 'ไม่น่าพอใจ - ควรตรวจสอบ', color: '#FFC107' },
+      'D': { icon: '⛔', text: 'อันตราย - ต้องหยุดเครื่อง!', color: '#F44336' }
+    };
+    
+    const ctx = document.getElementById('vibrationChart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Velocity RMS (mm/s)',
+          data: [],
+          borderColor: '#667eea',
+          backgroundColor: 'rgba(102, 126, 234, 0.1)',
+          borderWidth: 3,
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#667eea',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'top', labels: { font: { size: 14, weight: 'bold' }, color: '#333' } },
+          tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', titleFont: { size: 14 }, bodyFont: { size: 13 }, padding: 12, displayColors: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Velocity RMS (mm/s)', font: { size: 13, weight: 'bold' }, color: '#666' },
+            grid: { color: 'rgba(0,0,0,0.05)' },
+            ticks: { font: { size: 12 }, color: '#666' }
+          },
+          x: {
+            title: { display: true, text: 'เวลา', font: { size: 13, weight: 'bold' }, color: '#666' },
+            grid: { display: false },
+            ticks: { maxRotation: 45, minRotation: 45, font: { size: 11 }, color: '#666' }
+          }
+        },
+        animation: false // 📌 ปิดอนิเมชันกราฟเพื่อลดอาการหน่วง
+      }
+    });
+    
+    function connectWebSocket() {
+      try {
+        ws = new WebSocket(WS_URL);
+        
+        ws.onopen = () => {
+          console.log('✅ เชื่อมต่อ WebSocket สำเร็จ');
+          reconnectAttempts = 0;
+          updateConnectionStatus(true);
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            
+            if (message.type === 'init') {
+              if (message.machineClasses) machineClasses = message.machineClasses;
+              if (message.machineClass) currentMachineClass = message.machineClass;
+              renderMachineClassButtons();
+              
+              if (message.latest) updateDashboard(message.latest);
+              if (message.history && message.history.length > 0) {
+                message.history.forEach(data => updateChart(data));
+              }
+            } else if (message.type === 'update') {
+              updateDashboard(message.data);
+            } else if (message.type === 'machineClassChanged') {
+              currentMachineClass = message.machineClass;
+              renderMachineClassButtons();
+              if (message.latestData) updateDashboard(message.latestData);
+            }
+          } catch (error) {
+            console.error('Error parsing message:', error);
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('❌ WebSocket Error:', error);
+          updateConnectionStatus(false);
+        };
+        
+        ws.onclose = () => {
+          console.log('🔄 WebSocket ปิดการเชื่อมต่อ');
+          updateConnectionStatus(false);
+          
+          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+            console.log(`พยายามเชื่อมต่อใหม่ในอีก ${delay/1000} วินาที (ครั้งที่ ${reconnectAttempts})`);
+            setTimeout(connectWebSocket, delay);
+          } else {
+            document.getElementById('connectionStatus').textContent = 'ไม่สามารถเชื่อมต่อได้ - โปรดรีเฟรชหน้าเว็บ';
+          }
+        };
+      } catch (error) {
+        console.error('Error creating WebSocket:', error);
+        updateConnectionStatus(false);
+      }
+    }
+    
+    function updateConnectionStatus(isConnected) {
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('connectionStatus');
+      
+      if (isConnected) {
+        statusDot.className = 'status-dot status-online';
+        statusText.textContent = 'เชื่อมต่อสำเร็จ';
+      } else {
+        statusDot.className = 'status-dot status-offline';
+        statusText.textContent = reconnectAttempts > 0 ? 
+          `กำลังเชื่อมต่อใหม่... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})` : 
+          'ไม่ได้เชื่อมต่อ';
+      }
+    }
+
+    // 📌 ฟังก์ชันใหม่สำหรับคำนวณ Zone เองบนหน้าเว็บ
+    function calculateCurrentZone(vrms) {
+      if (!machineClasses[currentMachineClass]) return 'A';
+      const zones = machineClasses[currentMachineClass].zones;
+      if (vrms <= zones.A.max) return 'A';
+      if (vrms <= zones.B.max) return 'B';
+      if (vrms <= zones.C.max) return 'C';
+      return 'D';
+    }
+    
+    function updateDashboard(data) {
+      const vrms = parseFloat(data.vrms) || 0;
+      
+      // 📌 ใช้ฟังก์ชันคำนวณ Zone ที่เราสร้างขึ้น แทนการดึงค่าเดิมจาก Server
+      const zone = calculateCurrentZone(vrms);
+      
+      document.getElementById('vrmsValue').textContent = vrms.toFixed(2);
+      
+      const config = zoneConfig[zone] || zoneConfig['A'];
+      const zoneIndicator = document.getElementById('zoneIndicator');
+      const zoneDescription = document.getElementById('zoneDescription');
+      const zoneIcon = document.getElementById('zoneIcon');
+      
+      zoneIndicator.className = `zone-indicator zone-${zone}`;
+      zoneIndicator.textContent = `Zone ${zone}`;
+      zoneDescription.textContent = config.text;
+      zoneIcon.textContent = config.icon;
+      
+      const timestamp = new Date(data.timestamp);
+      document.getElementById('lastUpdate').textContent = 
+        timestamp.toLocaleString('th-TH', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          day: '2-digit', month: 'short', year: 'numeric'
+        });
+      
+      updateChart(data);
+    }
+    
+    function updateChart(data) {
+      const vrms = parseFloat(data.vrms) || 0;
+      const time = new Date(data.timestamp).toLocaleTimeString('th-TH', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      
+      dataPoints.push({ time, value: vrms });
+      if (dataPoints.length > MAX_POINTS) dataPoints.shift();
+      
+      chart.data.labels = dataPoints.map(d => d.time);
+      chart.data.datasets[0].data = dataPoints.map(d => d.value);
+      chart.update('none'); 
+      
+      updateStats();
+    }
+    
+    function updateStats() {
+      if (dataPoints.length === 0) return;
+      
+      const values = dataPoints.map(d => d.value);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const avg = values.reduce((a, b) => a + b, 0) / values.length;
+      
+      document.getElementById('minValue').textContent = min.toFixed(2);
+      document.getElementById('maxValue').textContent = max.toFixed(2);
+      document.getElementById('avgValue').textContent = avg.toFixed(2);
+      document.getElementById('dataCount').textContent = dataPoints.length;
+    }
+    
+    function renderMachineClassButtons() {
+      const container = document.getElementById('classButtons');
+      const infoContainer = document.getElementById('currentClassInfo');
+      
+      if (!container || !machineClasses) return;
+      
+      container.innerHTML = '';
+      
+      Object.keys(machineClasses).forEach(classKey => {
+        const classData = machineClasses[classKey];
+        const button = document.createElement('div');
+        button.className = `class-btn ${classKey === currentMachineClass ? 'active' : ''}`;
+        button.onclick = () => changeMachineClass(classKey);
+        
+        const zones = classData.zones;
+        button.innerHTML = `
+          <div class="class-btn-title">${classData.name}</div>
+          <div class="class-btn-desc">${classData.description}</div>
+          <div class="class-btn-zones">
+            <div class="zone-range"><span>Zone A:</span><span>≤ ${zones.A.max} mm/s</span></div>
+            <div class="zone-range"><span>Zone B:</span><span>≤ ${zones.B.max} mm/s</span></div>
+            <div class="zone-range"><span>Zone C:</span><span>≤ ${zones.C.max} mm/s</span></div>
+            <div class="zone-range"><span>Zone D:</span><span>> ${zones.C.max} mm/s</span></div>
+          </div>
+        `;
+        
+        container.appendChild(button);
+      });
+      
+      const current = machineClasses[currentMachineClass];
+      if (current && infoContainer) {
+        infoContainer.innerHTML = `<strong>📌 กำลังใช้:</strong> ${current.name} - ${current.description}`;
+      }
+    }
+    
+    function changeMachineClass(classKey) {
+      if (classKey === currentMachineClass) return;
+      
+      currentMachineClass = classKey;
+      renderMachineClassButtons();
+      
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'changeMachineClass', machineClass: classKey }));
+        console.log(`✅ เปลี่ยนเป็น ${machineClasses[classKey].name} (ส่งไปยัง Server)`);
+      }
+      
+      // 📌 เมื่อเปลี่ยน Class ให้บังคับอัปเดตหน้าจอทันที
+      if (dataPoints.length > 0) {
+        const lastValue = dataPoints[dataPoints.length - 1].value;
+        const tempZone = calculateCurrentZone(lastValue);
+        const config = zoneConfig[tempZone] || zoneConfig['A'];
+        
+        document.getElementById('zoneIndicator').className = `zone-indicator zone-${tempZone}`;
+        document.getElementById('zoneIndicator').textContent = `Zone ${tempZone}`;
+        document.getElementById('zoneDescription').textContent = config.text;
+        document.getElementById('zoneIcon').textContent = config.icon;
+      }
+    }
+
+    renderMachineClassButtons();
+    connectWebSocket();
+  </script>
+</body>
+</html>
