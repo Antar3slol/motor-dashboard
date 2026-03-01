@@ -59,6 +59,14 @@
     .stat-box { background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 15px; border-radius: 10px; text-align: center; }
     .stat-label { font-size: 0.85em; color: #666; margin-bottom: 5px; }
     .stat-value { font-size: 1.5em; font-weight: bold; color: #667eea; }
+    
+    /* 📌 ส่วนที่เพิ่มใหม่สำหรับกล่อง Database */
+    .database-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; }
+    .db-header { font-size: 1.3em; font-weight: bold; color: #333; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+    .db-container { max-height: 400px; overflow-y: auto; background: #f8f9fa; border-radius: 10px; padding: 15px; border: 1px solid #eee; }
+    .db-entry { border-bottom: 1px dashed #ccc; padding-bottom: 10px; margin-bottom: 10px; font-family: 'Courier New', Courier, monospace; font-size: 15px; color: #444; line-height: 1.6; }
+    .db-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    
     .last-update { text-align: center; color: rgba(255,255,255,0.8); margin-top: 20px; font-size: 0.95em; }
     .machine-class-selector { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; }
     .selector-title { font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
@@ -141,6 +149,16 @@
           <div class="stat-label">จุดข้อมูล</div>
           <div class="stat-value" id="dataCount">0</div>
         </div>
+      </div>
+    </div>
+    
+    <div class="database-card">
+      <div class="db-header">
+        <span>🗄️</span>
+        <span>ข้อมูลจาก Database (ประวัติย้อนหลัง)</span>
+      </div>
+      <div class="db-container" id="dbContainer">
+        <div style="text-align:center; color:#999; padding: 20px;">กำลังโหลดข้อมูล...</div>
       </div>
     </div>
     
@@ -251,9 +269,33 @@
             ticks: { maxRotation: 45, minRotation: 45, font: { size: 11 }, color: '#666' }
           }
         },
-        animation: false // 📌 ปิดอนิเมชันกราฟเพื่อลดอาการหน่วง
+        animation: false 
       }
     });
+
+    // 📌 ฟังก์ชันจัดรูปแบบเวลาให้เป็นแบบที่คุณต้องการเป๊ะๆ
+    function formatThaiDateString(isoString) {
+      const d = new Date(isoString);
+      const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      const day = d.getDate();
+      const month = thaiMonths[d.getMonth()];
+      const year = d.getFullYear() + 543;
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${day} / ${month} / ${year} ณ เวลา ${hours}:${minutes}(เวลาเป็น UTC+7)`;
+    }
+
+    // 📌 ฟังก์ชันสร้างก้อนข้อมูลโชว์ในกล่อง Database
+    function createDbEntryHTML(data) {
+      const vrms = parseFloat(data.vrms || 0).toFixed(1);
+      const zone = data.zone || 'A';
+      const timeStr = formatThaiDateString(data.timestamp);
+      return `<div class="db-entry">
+        vrms : ${vrms} mm/s<br>
+        zone : ${zone}<br>
+        Time : ${timeStr}
+      </div>`;
+    }
     
     function connectWebSocket() {
       try {
@@ -275,11 +317,31 @@
               renderMachineClassButtons();
               
               if (message.latest) updateDashboard(message.latest);
+              
+              // 📌 โหลดประวัติ Database ครั้งแรกตอนเปิดเว็บ
               if (message.history && message.history.length > 0) {
+                // วาดกราฟ (เรียงจากเก่าไปใหม่)
                 message.history.forEach(data => updateChart(data));
+                
+                // ใส่ข้อมูลลงกล่อง Database (สลับเอาของใหม่สุดไว้บนสุด)
+                const dbContainer = document.getElementById('dbContainer');
+                const reversedHistory = [...message.history].reverse(); 
+                dbContainer.innerHTML = reversedHistory.map(data => createDbEntryHTML(data)).join('');
+              } else {
+                document.getElementById('dbContainer').innerHTML = '<div style="text-align:center; color:#999; padding: 20px;">ยังไม่มีข้อมูลในระบบ</div>';
               }
+
             } else if (message.type === 'update') {
               updateDashboard(message.data);
+              
+              // 📌 เมื่อมีข้อมูลใหม่เข้ามา ให้ดันใส่บนสุดของกล่อง Database
+              const dbContainer = document.getElementById('dbContainer');
+              if (dbContainer.innerHTML.includes('กำลังโหลดข้อมูล') || dbContainer.innerHTML.includes('ยังไม่มีข้อมูล')) {
+                dbContainer.innerHTML = '';
+              }
+              const newEntry = createDbEntryHTML(message.data);
+              dbContainer.insertAdjacentHTML('afterbegin', newEntry);
+              
             } else if (message.type === 'machineClassChanged') {
               currentMachineClass = message.machineClass;
               renderMachineClassButtons();
@@ -329,7 +391,6 @@
       }
     }
 
-    // 📌 ฟังก์ชันใหม่สำหรับคำนวณ Zone เองบนหน้าเว็บ
     function calculateCurrentZone(vrms) {
       if (!machineClasses[currentMachineClass]) return 'A';
       const zones = machineClasses[currentMachineClass].zones;
@@ -341,8 +402,6 @@
     
     function updateDashboard(data) {
       const vrms = parseFloat(data.vrms) || 0;
-      
-      // 📌 ใช้ฟังก์ชันคำนวณ Zone ที่เราสร้างขึ้น แทนการดึงค่าเดิมจาก Server
       const zone = calculateCurrentZone(vrms);
       
       document.getElementById('vrmsValue').textContent = vrms.toFixed(2);
@@ -443,7 +502,6 @@
         console.log(`✅ เปลี่ยนเป็น ${machineClasses[classKey].name} (ส่งไปยัง Server)`);
       }
       
-      // 📌 เมื่อเปลี่ยน Class ให้บังคับอัปเดตหน้าจอทันที
       if (dataPoints.length > 0) {
         const lastValue = dataPoints[dataPoints.length - 1].value;
         const tempZone = calculateCurrentZone(lastValue);
