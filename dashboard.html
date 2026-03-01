@@ -154,8 +154,7 @@
     
     <div class="database-card">
       <div class="db-header">
-        <span>🗄️</span>
-        <span>ข้อมูลจาก Database (ประวัติย้อนหลัง)</span>
+        <span>ข้อมูลจาก Database</span>
       </div>
       <div class="db-container" id="dbContainer">
         <div style="text-align:center; color:#999; padding: 20px;">กำลังโหลดข้อมูล...</div>
@@ -282,13 +281,17 @@
       const year = d.getFullYear() + 543;
       const hours = String(d.getHours()).padStart(2, '0');
       const minutes = String(d.getMinutes()).padStart(2, '0');
-      return `${day} / ${month} / ${year} ณ เวลา ${hours}:${minutes}(เวลาเป็น UTC+7)`;
+      return `${day} / ${month} / ${year} ณ เวลา ${hours}:${minutes}:${seconds}`;
     }
 
-    // 📌 ฟังก์ชันสร้างก้อนข้อมูลโชว์ในกล่อง Database
+    // 📌 2. ฟังก์ชันสร้างก้อนข้อมูลโชว์ในกล่อง Database (ให้คำนวณ Zone สดๆ)
     function createDbEntryHTML(data) {
-      const vrms = parseFloat(data.vrms || 0).toFixed(1);
-      const zone = data.zone || 'A';
+      const vrmsValue = parseFloat(data.vrms || 0);
+      const vrms = vrmsValue.toFixed(2);
+      
+      // 📌 ให้หน้าเว็บคำนวณ Zone ใหม่จากตัวเลข vrms เลย (จะได้เปลี่ยนตาม Class ที่เลือกเป๊ะๆ)
+      const zone = calculateCurrentZone(vrmsValue); 
+      
       const timeStr = formatThaiDateString(data.timestamp);
       return `<div class="db-entry">
         vrms : ${vrms} mm/s<br>
