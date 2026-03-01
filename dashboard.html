@@ -154,7 +154,7 @@
     
     <div class="database-card">
       <div class="db-header">
-        <span>ข้อมูลจาก Database</span>
+        <span>ข้อมูลจาก Database </span>
       </div>
       <div class="db-container" id="dbContainer">
         <div style="text-align:center; color:#999; padding: 20px;">กำลังโหลดข้อมูล...</div>
@@ -274,15 +274,16 @@
 
     // 📌 ฟังก์ชันจัดรูปแบบเวลาให้เป็นแบบที่คุณต้องการเป๊ะๆ
     function formatThaiDateString(isoString) {
-      const d = new Date(isoString);
-      const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-      const day = d.getDate();
-      const month = thaiMonths[d.getMonth()];
-      const year = d.getFullYear() + 543;
-      const hours = String(d.getHours()).padStart(2, '0');
-      const minutes = String(d.getMinutes()).padStart(2, '0');
-      return `${day} / ${month} / ${year} ณ เวลา ${hours}:${minutes}:${seconds}`;
-    }
+  const d = new Date(isoString);
+  const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const day = d.getDate();
+  const month = thaiMonths[d.getMonth()];
+  const year = d.getFullYear() + 543;
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0'); // 📌 เพิ่มบรรทัดนี้เข้ามา
+  return `${day} / ${month} / ${year} ณ เวลา ${hours}:${minutes}:${seconds}`;
+}
 
     // 📌 2. ฟังก์ชันสร้างก้อนข้อมูลโชว์ในกล่อง Database (ให้คำนวณ Zone สดๆ)
     function createDbEntryHTML(data) {
