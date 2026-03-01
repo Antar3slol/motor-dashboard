@@ -3,8 +3,29 @@ const cors = require('cors');
 const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
+const mongoose = require('mongoose'); // 📌 เพิ่ม Mongoose สำหรับคุยกับ MongoDB
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// 📌 1. ตั้งค่าลิงก์เชื่อมต่อ MongoDB (จะรับค่าจาก Render หรือใช้ลิงก์ตรงๆ ก็ได้)
+// *** อย่าลืมเปลี่ยน <username> และ <password> เป็นของคุณเอง ***
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/MotorVibDB?retryWrites=true&w=majority';
+
+// 📌 2. เริ่มการเชื่อมต่อ
+mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ!'))
+  .catch(err => console.error('❌ ไม่สามารถเชื่อมต่อ MongoDB:', err));
+
+// 📌 3. สร้างโครงสร้างตาราง (Schema) สำหรับเก็บข้อมูลความสั่น
+const vibrationSchema = new mongoose.Schema({
+  vrms: Number,
+  zone: String,
+  timestamp: { type: Date, default: Date.now }
+});
+
+// 📌 สร้าง Model 
+const VibrationData = mongoose.model('VibrationData', vibrationSchema);
 
 app.use(cors());
 app.use(express.json());
@@ -13,144 +34,82 @@ app.use(express.static(__dirname));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// 📌 เพิ่มตัวแปรเก็บ Class ปัจจุบันของระบบ (ค่าเริ่มต้นเป็น class2)
-let globalMachineClass = 'class2';
-
 let latestData = {
   vrms: 0,
+  zone: 'A',
   timestamp: new Date().toISOString()
 };
 
-let dataHistory = [];
-const MAX_HISTORY = 100;
-
-wss.on('connection', (ws) => {
+// เมื่อมีคนเปิดหน้าเว็บ Dashboard
+wss.on('connection', async (ws) => {
   console.log('✅ มีผู้เข้าชม Dashboard');
   
-  // 📌 ส่งข้อมูลและ Class ปัจจุบันไปให้หน้าเว็บตอนโหลดเข้าเว็บครั้งแรก
-  ws.send(JSON.stringify({
-    type: 'init',
-    latest: latestData,
-    history: dataHistory,
-    machineClass: globalMachineClass
-  }));
+  try {
+    // 📌 ดึงข้อมูลย้อนหลัง 100 รายการล่าสุดจาก MongoDB เพื่อวาดกราฟตั้งต้น
+    const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
+    const dataHistory = history.reverse(); // กลับด้านข้อมูลให้เรียงจากเก่าไปใหม่
+    
+    ws.send(JSON.stringify({
+      type: 'init',
+      latest: latestData,
+      history: dataHistory
+    }));
+  } catch (err) {
+    console.error('Error fetching history:', err);
+  }
 
-  // 📌 รับข้อความจากหน้าเว็บ (รับค่าตอนผู้ใช้กดเปลี่ยน Class)
-  ws.on('message', (message) => {
-    try {
-      const msg = JSON.parse(message);
-      if (msg.type === 'changeMachineClass') {
-        globalMachineClass = msg.machineClass;
-        console.log('🔄 อัปเดต Class ในระบบเป็น:', globalMachineClass);
-        
-        // (เผื่อเปิดหลายจอ) แจ้งให้หน้าจออื่นเปลี่ยน Class ตามด้วย
-        wss.clients.forEach((client) => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: 'machineClassChanged',
-              machineClass: globalMachineClass,
-              latestData: latestData
-            }));
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error processing message:', error);
-    }
-  });
-
-  ws.on('close', () => {
-    console.log('❌ ผู้เข้าชมออกจาก Dashboard');
-  });
+  ws.on('close', () => console.log('❌ ผู้เข้าชมออกจาก Dashboard'));
 });
 
-// ส่งข้อมูลไปทุก Client
+// ฟังก์ชันกระจายข้อมูลให้ทุกหน้าจอ
 function broadcastData(data) {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({
-        type: 'update',
-        data: data
-      }));
+      client.send(JSON.stringify({ type: 'update', data: data }));
     }
   });
 }
 
-// API: รับข้อมูลจาก ESP32
-app.post('/api/vibration', (req, res) => {
-  const { vrms } = req.body;
+// 📌 API: รับข้อมูลจาก ESP32 (ADXL345)
+app.post('/api/vibration', async (req, res) => {
+  const { vrms, zone } = req.body;
   
-  // บันทึกข้อมูล (ไม่รับค่า zone จาก ESP32 แล้ว เพราะให้เว็บคำนวณเอง)
   latestData = {
     vrms: parseFloat(vrms) || 0,
-    timestamp: new Date().toISOString()
+    zone: zone || 'A',
+    timestamp: new Date()
   };
   
-  // เพิ่มในประวัติ
-  dataHistory.push(latestData);
-  if (dataHistory.length > MAX_HISTORY) {
-    dataHistory.shift();
+  try {
+    // 📌 สร้างเรคคอร์ดใหม่และเซฟลง MongoDB
+    const newData = new VibrationData(latestData);
+    await newData.save();
+    console.log(`💾 บันทึกค่า ${latestData.vrms} mm/s ลงฐานข้อมูลแล้ว`);
+  } catch (err) {
+    console.error('❌ บันทึกข้อมูลล้มเหลว:', err);
   }
   
-  // ส่งข้อมูลไปยังทุก Dashboard
   broadcastData(latestData);
-  
-  // 📌 ตอบกลับ ESP32 พร้อมแนบค่า Class ปัจจุบันกลับไปให้
-  res.json({ 
-    status: 'success', 
-    data: latestData,
-    currentClass: globalMachineClass 
-  });
+  res.json({ status: 'success', data: latestData });
 });
 
 // API: ดึงข้อมูลล่าสุด
-app.get('/api/vibration', (req, res) => {
-  res.json(latestData);
-});
+app.get('/api/vibration', (req, res) => res.json(latestData));
 
-// API: ดึงประวัติ
-app.get('/api/history', (req, res) => {
-  res.json(dataHistory);
-});
-
-// API: สำรองสำหรับเว็บเปลี่ยน Class ผ่าน HTTP
-app.post('/api/machine-class', (req, res) => {
-  if (req.body.machineClass) {
-    globalMachineClass = req.body.machineClass;
-    console.log('🔄 อัปเดต Class ผ่าน API เป็น:', globalMachineClass);
+// API: ดึงประวัติทั้งหมด (จำกัด 1000 รายการ ป้องกันเว็บค้าง)
+app.get('/api/history', async (req, res) => {
+  try {
+    const history = await VibrationData.find().sort({ timestamp: -1 }).limit(1000);
+    res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
   }
-  res.json({ status: 'success', machineClass: globalMachineClass, latestData });
 });
 
-// หน้าหลัก
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dashboard.html'));
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
-// เริ่มต้น Server
 server.listen(PORT, '0.0.0.0', () => {
   console.log('='.repeat(50));
-  console.log('🚀 Server กำลังทำงาน!');
-  console.log('='.repeat(50));
-  console.log(`📱 เปิด Dashboard: http://localhost:${PORT}`);
-  console.log(`🌐 IP ในเครือข่าย: http://${getLocalIP()}:${PORT}`);
-  console.log('='.repeat(50));
-  console.log('💡 กด Ctrl+C เพื่อหยุด Server');
+  console.log(`🚀 Server กำลังทำงานที่พอร์ต: ${PORT}`);
   console.log('='.repeat(50));
 });
-
-// หา IP Address ของเครื่อง
-function getLocalIP() {
-  const os = require('os');
-  const interfaces = os.networkInterfaces();
-  
-  for (let name of Object.keys(interfaces)) {
-    for (let iface of interfaces[name]) {
-      // ข้าม internal และ non-IPv4
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return 'localhost';
-}
