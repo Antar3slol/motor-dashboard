@@ -8,10 +8,9 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 📌 ตัวแปรจำค่า Class
 let currentMachineClass = 'class2'; 
 
-// ฝังลิงก์จริงลงไปตรงๆ เลย บังคับให้ Render อ่านชัวร์ๆ
+// ลิงก์ MongoDB ของคุณ
 const MONGODB_URI = 'mongodb+srv://chaturawit2019zaza_db_user:L5IXwEk3lbrp1m48@motordb.baybmu5.mongodb.net/MotorVibDB?retryWrites=true&w=majority';
 
 mongoose.connect(MONGODB_URI)
@@ -39,7 +38,6 @@ let latestData = {
   timestamp: new Date().toISOString()
 };
 
-// 📌 ตัวกรองคำอัจฉริยะ (กันเซิร์ฟเวอร์อ่านค่าจากเว็บไม่ออก)
 function extractClass(raw) {
     if (!raw) return null;
     let str = String(raw).toLowerCase().replace(/\s+/g, '');
@@ -51,7 +49,7 @@ function extractClass(raw) {
 }
 
 wss.on('connection', async (ws) => {
-  console.log('✅ มีผู้เข้าชม Dashboard');
+  console.log('✅ มีผู้เข้าชม Dashboard (WebSocket เชื่อมต่อแล้ว)');
   
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
@@ -61,23 +59,22 @@ wss.on('connection', async (ws) => {
       type: 'init',
       latest: latestData,
       history: dataHistory,
-      currentClass: currentMachineClass
+      machineClass: currentMachineClass
     }));
   } catch (err) {
     console.error('Error fetching history:', err);
   }
 
-  // 📌 1. รับค่าจากหน้าเว็บ (ดักจับทุกรูปแบบ)
   ws.on('message', (message) => {
     try {
       const msg = JSON.parse(message);
-      // หน้าเว็บเก่าของคุณอาจจะส่งมาเป็น .value, .class หรือ .className
-      let rawClass = msg.className || msg.class || msg.value || msg.data;
+      // 📌 ดักจับตัวแปร machineClass จากหน้าเว็บของคุณ
+      let rawClass = msg.machineClass || msg.className || msg.class || msg.value || msg.data;
       
       let parsedClass = extractClass(rawClass);
       if (parsedClass) {
         currentMachineClass = parsedClass;
-        console.log('⚙️ เซิร์ฟเวอร์รับทราบ! เปลี่ยนเป็น:', currentMachineClass);
+        console.log('⚙️ หน้าเว็บเปลี่ยนสเปคเครื่องจักรเป็น:', currentMachineClass);
       }
     } catch(e) {}
   });
@@ -93,34 +90,34 @@ function broadcastData(data) {
   });
 }
 
-// 📌 2. API เผื่อหน้าเว็บส่งผ่าน Fetch
 app.post('/api/class', (req, res) => {
-  let rawClass = req.body.className || req.body.class || req.body.value;
+  let rawClass = req.body.machineClass || req.body.className || req.body.class || req.body.value;
   let parsedClass = extractClass(rawClass);
   if (parsedClass) {
     currentMachineClass = parsedClass;
-    console.log('⚙️ เซิร์ฟเวอร์รับทราบทาง API! เปลี่ยนเป็น:', currentMachineClass);
+    console.log('⚙️ API รับคำสั่งเปลี่ยนสเปคเป็น:', currentMachineClass);
   }
   res.json({ status: 'success', currentClass: currentMachineClass });
 });
 
-// 📌 3. ส่ง Class ล่าสุดกลับไปให้ ESP32 ทุกครั้งที่ส่งข้อมูลมา
 app.post('/api/vibration', (req, res) => {
   const { vrms, zone } = req.body;
   
+  // 📌 เรดาร์จับสัญญาณ: ถ้า ESP32 ส่งข้อมูลมาถึง ข้อความนี้จะเด้งใน Logs ของ Render ทันที!
+  console.log(`📡 ได้รับข้อมูลจาก ESP32 -> ความสั่น: ${vrms} mm/s, Zone: ${zone}`);
+
   latestData = {
     vrms: parseFloat(vrms) || 0,
     zone: zone || 'A',
     timestamp: new Date()
   };
   
-  // โยนข้อมูล Class กลับไปให้ ESP32 เอาไปแสดงบนจอ OLED ทันที
   res.json({ status: 'success', currentClass: currentMachineClass }); 
   
   broadcastData(latestData);
   
   const newData = new VibrationData(latestData);
-  newData.save().catch(err => console.error('❌ บันทึกข้อมูลล้มเหลว:', err));
+  newData.save().catch(err => console.error('❌ บันทึกข้อมูลลงฐานข้อมูลล้มเหลว:', err));
 });
 
 app.get('/api/vibration', (req, res) => res.json(latestData));
