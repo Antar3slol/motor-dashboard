@@ -8,8 +8,8 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 📌 ตัวแปรจำค่า Class ปัจจุบันของเครื่อง
-let currentMachineClass = 'class2'; // ค่าเริ่มต้น
+// 📌 ตัวแปรจำค่า Class
+let currentMachineClass = 'class2'; 
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/MotorVibDB?retryWrites=true&w=majority';
 
@@ -38,15 +38,15 @@ let latestData = {
   timestamp: new Date().toISOString()
 };
 
-// 📌 ฟังก์ชันช่วยกรองคำให้ออกมาเป็น "class1", "class2" เสมอ (เพื่อกัน ESP32 เอ๋อ)
-function formatClassName(rawName) {
-    if (!rawName) return 'class2';
-    let str = String(rawName).toLowerCase().replace(/\s+/g, '');
+// 📌 ตัวกรองคำอัจฉริยะ (กันเซิร์ฟเวอร์อ่านค่าจากเว็บไม่ออก)
+function extractClass(raw) {
+    if (!raw) return null;
+    let str = String(raw).toLowerCase().replace(/\s+/g, '');
     if (str.includes('1')) return 'class1';
     if (str.includes('2')) return 'class2';
     if (str.includes('3')) return 'class3';
     if (str.includes('4')) return 'class4';
-    return 'class2';
+    return null;
 }
 
 wss.on('connection', async (ws) => {
@@ -60,20 +60,23 @@ wss.on('connection', async (ws) => {
       type: 'init',
       latest: latestData,
       history: dataHistory,
-      currentClass: currentMachineClass // ส่ง Class ปัจจุบันให้หน้าเว็บด้วย
+      currentClass: currentMachineClass
     }));
   } catch (err) {
     console.error('Error fetching history:', err);
   }
 
-  // 📌 รับค่าตอนที่คนกดเปลี่ยน Class บนหน้าเว็บ (ผ่าน WebSocket)
+  // 📌 1. รับค่าจากหน้าเว็บ (ดักจับทุกรูปแบบ)
   ws.on('message', (message) => {
     try {
       const msg = JSON.parse(message);
-      if (msg.type === 'changeClass' || msg.className) {
-        // ใช้ฟังก์ชันแปลงคำให้ตรงกับ ESP32 เสมอ
-        currentMachineClass = formatClassName(msg.className);
-        console.log('⚙️ อัปเดต Class เป็น:', currentMachineClass);
+      // หน้าเว็บเก่าของคุณอาจจะส่งมาเป็น .value, .class หรือ .className
+      let rawClass = msg.className || msg.class || msg.value || msg.data;
+      
+      let parsedClass = extractClass(rawClass);
+      if (parsedClass) {
+        currentMachineClass = parsedClass;
+        console.log('⚙️ เซิร์ฟเวอร์รับทราบ! เปลี่ยนเป็น:', currentMachineClass);
       }
     } catch(e) {}
   });
@@ -89,16 +92,18 @@ function broadcastData(data) {
   });
 }
 
-// 📌 API สำหรับรับค่าเปลี่ยน Class (เผื่อหน้าเว็บใช้ Fetch API)
+// 📌 2. API เผื่อหน้าเว็บส่งผ่าน Fetch
 app.post('/api/class', (req, res) => {
-  if (req.body && req.body.className) {
-    currentMachineClass = formatClassName(req.body.className);
-    console.log('⚙️ หน้าเว็บเปลี่ยน Class เป็น (API):', currentMachineClass);
+  let rawClass = req.body.className || req.body.class || req.body.value;
+  let parsedClass = extractClass(rawClass);
+  if (parsedClass) {
+    currentMachineClass = parsedClass;
+    console.log('⚙️ เซิร์ฟเวอร์รับทราบทาง API! เปลี่ยนเป็น:', currentMachineClass);
   }
   res.json({ status: 'success', currentClass: currentMachineClass });
 });
 
-// 📌 API: รับข้อมูลจาก ESP32 (ADXL345)
+// 📌 3. ส่ง Class ล่าสุดกลับไปให้ ESP32 ทุกครั้งที่ส่งข้อมูลมา
 app.post('/api/vibration', (req, res) => {
   const { vrms, zone } = req.body;
   
@@ -108,13 +113,11 @@ app.post('/api/vibration', (req, res) => {
     timestamp: new Date()
   };
   
-  // 1. ตอบกลับ ESP32 "ทันที" แบบไม่รอใคร (แก้ดีเลย์หน้าจอ)
+  // โยนข้อมูล Class กลับไปให้ ESP32 เอาไปแสดงบนจอ OLED ทันที
   res.json({ status: 'success', currentClass: currentMachineClass }); 
   
-  // 2. กระจายข้อมูลให้หน้าเว็บทั้งหมด
   broadcastData(latestData);
   
-  // 3. แอบนำข้อมูลไปบันทึกลง MongoDB แบบเบื้องหลัง
   const newData = new VibrationData(latestData);
   newData.save().catch(err => console.error('❌ บันทึกข้อมูลล้มเหลว:', err));
 });
