@@ -11,11 +11,12 @@ const PORT = process.env.PORT || 3000;
 // 📌 ตัวแปรจำค่า Class
 let currentMachineClass = 'class2'; 
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/MotorVibDB?retryWrites=true&w=majority';
+// ฝังลิงก์จริงลงไปตรงๆ เลย บังคับให้ Render อ่านชัวร์ๆ
+const MONGODB_URI = 'mongodb+srv://chaturawit2019zaza_db_user:L5IXwEk3lbrp1m48@motordb.baybmu5.mongodb.net/MotorVibDB?retryWrites=true&w=majority';
 
-mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ!'))
-  .catch(err => console.error('❌ ไม่สามารถเชื่อมต่อ MongoDB:', err));
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ 100%!'))
+  .catch(err => console.error('❌ Error เชื่อมต่อฐานข้อมูล:', err.message));
 
 const vibrationSchema = new mongoose.Schema({
   vrms: Number,
