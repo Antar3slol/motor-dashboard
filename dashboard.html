@@ -153,8 +153,13 @@
     </div>
     
     <div class="database-card">
-      <div class="db-header">
-        <span>ข้อมูลจาก Database </span>
+      <div class="db-header" style="justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span>ข้อมูลจาก Database</span>
+        </div>
+        <button onclick="exportToCSV()" style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 0.9em; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: 0.3s;">
+          📥 ดาวน์โหลด Excel (CSV)
+        </button>
       </div>
       <div class="db-container" id="dbContainer">
         <div style="text-align:center; color:#999; padding: 20px;">กำลังโหลดข้อมูล...</div>
@@ -351,6 +356,9 @@
               const newEntry = createDbEntryHTML(message.data);
               dbContainer.insertAdjacentHTML('afterbegin', newEntry);
               
+              if (dbContainer.children.length > 100) {
+                dbContainer.removeChild(dbContainer.lastChild);
+              }
             } else if (message.type === 'classUpdate') { // 📌 เปลี่ยนชื่อให้ตรงกับ Server
               currentMachineClass = message.currentClass; // 📌 เปลี่ยนมารับตัวแปร currentClass
               renderMachineClassButtons();
@@ -524,6 +532,50 @@
 
     renderMachineClassButtons();
     connectWebSocket();
+
+  // 📌 ฟังก์ชันสำหรับดาวน์โหลดข้อมูลเป็นไฟล์ Excel (CSV)
+    async function exportToCSV() {
+      try {
+        // 1. ดึงข้อมูล 1,000 รายการล่าสุดจาก Database หลังบ้าน
+        // (ใช้ API ที่คุณสร้างรอไว้แล้วใน server.js)
+        const response = await fetch('/api/history');
+        const data = await response.json();
+
+        if (!data || data.length === 0) {
+          alert('ไม่มีข้อมูลสำหรับดาวน์โหลด');
+          return;
+        }
+
+        // 2. สร้าง Header ของไฟล์ CSV (ใส่ \uFEFF เพื่อให้ Excel อ่านภาษาไทยได้ไม่เพี้ยน)
+        let csvContent = '\uFEFF'; 
+        csvContent += "วันที่และเวลา,ความสั่น (mm/s),Zone\n";
+
+        // 3. วนลูปนำข้อมูลมาต่อกันทีละบรรทัด
+        data.forEach(row => {
+          // ใช้ฟังก์ชันแปลงเวลาที่คุณเขียนไว้แล้ว
+          const timeStr = formatThaiDateString(row.timestamp);
+          const vrms = parseFloat(row.vrms || 0).toFixed(2);
+          const zone = row.zone || 'A';
+          
+          // นำมาจัดรูปคั่นด้วยลูกน้ำ (,) สำหรับ CSV
+          csvContent += `"${timeStr}","${vrms}","Zone ${zone}"\n`;
+        });
+
+        // 4. สั่งให้เบราว์เซอร์ดาวน์โหลดไฟล์
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Motor_Vibration_Report.csv`); // ชื่อไฟล์
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+      } catch (error) {
+        console.error('Export Error:', error);
+        alert('เกิดข้อผิดพลาดในการดาวน์โหลดข้อมูล');
+      }
+    }
   </script>
 </body>
 </html>
