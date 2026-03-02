@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-let currentMachineClass = 'class2'; 
+let currentMachineClass = 'class2';
 
 // ลิงก์ MongoDB ของคุณ
 const MONGODB_URI = 'mongodb+srv://chaturawit2019zaza_db_user:L5IXwEk3lbrp1m48@motordb.baybmu5.mongodb.net/MotorVibDB?retryWrites=true&w=majority';
@@ -35,7 +35,7 @@ const wss = new WebSocket.Server({ server });
 let latestData = {
   vrms: 0,
   zone: 'A',
-  timestamp: new Date().toISOString()
+  timestamp: new Date()
 };
 
 function extractClass(raw) {
@@ -48,7 +48,6 @@ function extractClass(raw) {
     return null;
 }
 
-// 📌 ระบบ WebSocket ใหม่ (รับข้อมูลจากบอร์ด + ส่งข้อมูลให้หน้าเว็บ)
 wss.on('connection', async (ws) => {
   console.log('✅ มีอุปกรณ์เชื่อมต่อ WebSocket เข้ามาแล้ว');
   
@@ -66,37 +65,38 @@ wss.on('connection', async (ws) => {
     try {
       const msg = JSON.parse(message);
 
-      // 1. 📡 ถ้าเป็นข้อมูลความสั่นสะเทือนจากบอร์ด ESP32
+      // 1. 📡 รับข้อมูลจากบอร์ด ESP32
       if (msg.type === 'sensor') {
+        
+        // 📌 สร้างเวลาไทย (UTC+7)
+        let localTime = new Date(Date.now() + (7 * 60 * 60 * 1000));
+
         latestData = {
           vrms: parseFloat(msg.vrms) || 0,
-          zone: 'A', // เว็บเราคำนวณ Zone เองแล้ว ใส่ A ไว้ก่อนได้
-          timestamp: new Date()
+          zone: msg.zone || 'A', // 📌 ดึงตัวอักษร Zone (A,B,C,D) มาจาก ESP32 จริงๆ แล้ว
+          timestamp: localTime   // 📌 บันทึกเวลาเป็นเวลาไทยแล้ว
         };
 
-        // โยน Class ปัจจุบันกลับไปอัปเดตหน้าจอบอร์ด ESP32
         ws.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
 
-        // กระจายข้อมูลให้หน้าเว็บ Dashboard ทุกหน้าที่เปิดอยู่
         wss.clients.forEach((client) => {
           if (client !== ws && client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'update', data: latestData, currentClass: currentMachineClass }));
           }
         });
 
-        // แอบบันทึกลง Database เบื้องหลัง
+        // บันทึกลง Database
         new VibrationData(latestData).save().catch(()=>{});
       }
       
-      // 2. ⚙️ ถ้าเป็นคำสั่งเปลี่ยน Class จากหน้าเว็บ
+      // 2. ⚙️ รับคำสั่งเปลี่ยน Class จากหน้าเว็บ
       else {
-        let rawClass = msg.machineClass || msg.className || msg.class;
+        let rawClass = msg.machineClass || msg.className || msg.class || msg.value || msg.data;
         let parsedClass = extractClass(rawClass);
         if (parsedClass) {
           currentMachineClass = parsedClass;
           console.log('⚙️ หน้าเว็บสั่งเปลี่ยนสเปคเป็น:', currentMachineClass);
 
-          // ประกาศบอกทุกคน (รวมถึงบอร์ด ESP32) ว่า Class เปลี่ยนแล้ว
           wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
@@ -110,46 +110,6 @@ wss.on('connection', async (ws) => {
   ws.on('close', () => console.log('❌ อุปกรณ์ยกเลิกการเชื่อมต่อ WebSocket'));
 });
 
-function broadcastData(data) {
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'update', data: data, currentClass: currentMachineClass }));
-    }
-  });
-}
-
-app.post('/api/class', (req, res) => {
-  let rawClass = req.body.machineClass || req.body.className || req.body.class || req.body.value;
-  let parsedClass = extractClass(rawClass);
-  if (parsedClass) {
-    currentMachineClass = parsedClass;
-    console.log('⚙️ API รับคำสั่งเปลี่ยนสเปคเป็น:', currentMachineClass);
-  }
-  res.json({ status: 'success', currentClass: currentMachineClass });
-});
-
-app.post('/api/vibration', (req, res) => {
-  const { vrms, zone } = req.body;
-  
-  // 📌 เรดาร์จับสัญญาณ: ถ้า ESP32 ส่งข้อมูลมาถึง ข้อความนี้จะเด้งใน Logs ของ Render ทันที!
-  console.log(`📡 ได้รับข้อมูลจาก ESP32 -> ความสั่น: ${vrms} mm/s, Zone: ${zone}`);
-
-  latestData = {
-    vrms: parseFloat(vrms) || 0,
-    zone: zone || 'A',
-    timestamp: new Date()
-  };
-  
-  res.json({ status: 'success', currentClass: currentMachineClass }); 
-  
-  broadcastData(latestData);
-  
-  const newData = new VibrationData(latestData);
-  newData.save().catch(err => console.error('❌ บันทึกข้อมูลลงฐานข้อมูลล้มเหลว:', err));
-});
-
-app.get('/api/vibration', (req, res) => res.json(latestData));
-
 app.get('/api/history', async (req, res) => {
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(1000);
@@ -162,7 +122,5 @@ app.get('/api/history', async (req, res) => {
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('='.repeat(50));
-  console.log(`🚀 Server กำลังทำงานที่พอร์ต: ${PORT}`);
-  console.log('='.repeat(50));
+  console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`);
 });
