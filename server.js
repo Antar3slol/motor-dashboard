@@ -48,38 +48,66 @@ function extractClass(raw) {
     return null;
 }
 
+// 📌 ระบบ WebSocket ใหม่ (รับข้อมูลจากบอร์ด + ส่งข้อมูลให้หน้าเว็บ)
 wss.on('connection', async (ws) => {
-  console.log('✅ มีผู้เข้าชม Dashboard (WebSocket เชื่อมต่อแล้ว)');
+  console.log('✅ มีอุปกรณ์เชื่อมต่อ WebSocket เข้ามาแล้ว');
   
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
-    const dataHistory = history.reverse();
-    
     ws.send(JSON.stringify({
       type: 'init',
       latest: latestData,
-      history: dataHistory,
+      history: history.reverse(),
       machineClass: currentMachineClass
     }));
-  } catch (err) {
-    console.error('Error fetching history:', err);
-  }
+  } catch (err) {}
 
   ws.on('message', (message) => {
     try {
       const msg = JSON.parse(message);
-      // 📌 ดักจับตัวแปร machineClass จากหน้าเว็บของคุณ
-      let rawClass = msg.machineClass || msg.className || msg.class || msg.value || msg.data;
+
+      // 1. 📡 ถ้าเป็นข้อมูลความสั่นสะเทือนจากบอร์ด ESP32
+      if (msg.type === 'sensor') {
+        latestData = {
+          vrms: parseFloat(msg.vrms) || 0,
+          zone: 'A', // เว็บเราคำนวณ Zone เองแล้ว ใส่ A ไว้ก่อนได้
+          timestamp: new Date()
+        };
+
+        // โยน Class ปัจจุบันกลับไปอัปเดตหน้าจอบอร์ด ESP32
+        ws.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
+
+        // กระจายข้อมูลให้หน้าเว็บ Dashboard ทุกหน้าที่เปิดอยู่
+        wss.clients.forEach((client) => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'update', data: latestData, currentClass: currentMachineClass }));
+          }
+        });
+
+        // แอบบันทึกลง Database เบื้องหลัง
+        new VibrationData(latestData).save().catch(()=>{});
+      }
       
-      let parsedClass = extractClass(rawClass);
-      if (parsedClass) {
-        currentMachineClass = parsedClass;
-        console.log('⚙️ หน้าเว็บเปลี่ยนสเปคเครื่องจักรเป็น:', currentMachineClass);
+      // 2. ⚙️ ถ้าเป็นคำสั่งเปลี่ยน Class จากหน้าเว็บ
+      else {
+        let rawClass = msg.machineClass || msg.className || msg.class;
+        let parsedClass = extractClass(rawClass);
+        if (parsedClass) {
+          currentMachineClass = parsedClass;
+          console.log('⚙️ หน้าเว็บสั่งเปลี่ยนสเปคเป็น:', currentMachineClass);
+
+          // ประกาศบอกทุกคน (รวมถึงบอร์ด ESP32) ว่า Class เปลี่ยนแล้ว
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
+            }
+          });
+        }
       }
     } catch(e) {}
   });
 
-  ws.on('close', () => console.log('❌ ผู้เข้าชมออกจาก Dashboard'));
+  ws.on('close', () => console.log('❌ อุปกรณ์ยกเลิกการเชื่อมต่อ WebSocket'));
 });
 
 function broadcastData(data) {
