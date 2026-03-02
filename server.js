@@ -1,3 +1,4 @@
+require('dotenv').config(); // 📌 1. เรียกใช้ Environment Variables
 const express = require('express');
 const cors = require('cors');
 const WebSocket = require('ws');
@@ -10,8 +11,8 @@ const PORT = process.env.PORT || 3000;
 
 let currentMachineClass = 'class2';
 
-// ลิงก์ MongoDB ของคุณ
-const MONGODB_URI = 'mongodb+srv://chaturawit2019zaza_db_user:L5IXwEk3lbrp1m48@motordb.baybmu5.mongodb.net/MotorVibDB?retryWrites=true&w=majority';
+// 📌 1. ดึงรหัสผ่านจาก Environment Variable ของ Render แทนการเขียนลงโค้ดตรงๆ
+const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ 100%!'))
@@ -32,11 +33,7 @@ app.use(express.static(__dirname));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-let latestData = {
-  vrms: 0,
-  zone: 'A',
-  timestamp: new Date()
-};
+let latestData = { vrms: 0, zone: 'A', timestamp: new Date() };
 
 function extractClass(raw) {
     if (!raw) return null;
@@ -48,33 +45,35 @@ function extractClass(raw) {
     return null;
 }
 
+// 📌 3. ระบบ Ping/Pong กัน Render ตัดสาย (Keep-alive)
+const interval = setInterval(() => {
+  wss.clients.forEach((client) => {
+    if (client.isAlive === false) return client.terminate();
+    client.isAlive = false;
+    client.ping(); // ส่งสัญญาณหัวใจเต้นไปหาหน้าเว็บและบอร์ด
+  });
+}, 30000); // ทำทุกๆ 30 วินาที
+
 wss.on('connection', async (ws) => {
   console.log('✅ มีอุปกรณ์เชื่อมต่อ WebSocket เข้ามาแล้ว');
   
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; }); // ถ้ารับ Pong กลับมา แปลว่ายังมีชีวิตอยู่
+
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
-    ws.send(JSON.stringify({
-      type: 'init',
-      latest: latestData,
-      history: history.reverse(),
-      machineClass: currentMachineClass
-    }));
+    ws.send(JSON.stringify({ type: 'init', latest: latestData, history: history.reverse(), machineClass: currentMachineClass }));
   } catch (err) {}
 
   ws.on('message', (message) => {
     try {
       const msg = JSON.parse(message);
 
-      // 1. 📡 รับข้อมูลจากบอร์ด ESP32
       if (msg.type === 'sensor') {
-        
-        // 📌 สร้างเวลาไทย (UTC+7)
-        let localTime = new Date(Date.now() + (7 * 60 * 60 * 1000));
-
         latestData = {
           vrms: parseFloat(msg.vrms) || 0,
-          zone: msg.zone || 'A', // 📌 ดึงตัวอักษร Zone (A,B,C,D) มาจาก ESP32 จริงๆ แล้ว
-          timestamp: localTime   // 📌 บันทึกเวลาเป็นเวลาไทยแล้ว
+          zone: msg.zone || 'A',
+          timestamp: new Date() // 📌 2. ลบสูตร +7 ออก บันทึกเป็นเวลาสากล (UTC) ปกติ เพื่อให้เบราว์เซอร์ฝั่งคนดูคำนวณเวลาไทยให้เอง
         };
 
         ws.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
@@ -85,18 +84,13 @@ wss.on('connection', async (ws) => {
           }
         });
 
-        // บันทึกลง Database
         new VibrationData(latestData).save().catch(()=>{});
       }
-      
-      // 2. ⚙️ รับคำสั่งเปลี่ยน Class จากหน้าเว็บ
       else {
-        let rawClass = msg.machineClass || msg.className || msg.class || msg.value || msg.data;
-        let parsedClass = extractClass(rawClass);
+        let parsedClass = extractClass(msg.machineClass || msg.className || msg.class || msg.value || msg.data);
         if (parsedClass) {
           currentMachineClass = parsedClass;
           console.log('⚙️ หน้าเว็บสั่งเปลี่ยนสเปคเป็น:', currentMachineClass);
-
           wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
@@ -110,6 +104,8 @@ wss.on('connection', async (ws) => {
   ws.on('close', () => console.log('❌ อุปกรณ์ยกเลิกการเชื่อมต่อ WebSocket'));
 });
 
+wss.on('close', () => { clearInterval(interval); });
+
 app.get('/api/history', async (req, res) => {
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(1000);
@@ -120,7 +116,4 @@ app.get('/api/history', async (req, res) => {
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`);
-});
+server.listen(PORT, '0.0.0.0', () => { console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`); });

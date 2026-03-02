@@ -286,18 +286,23 @@
 }
 
     // 📌 2. ฟังก์ชันสร้างก้อนข้อมูลโชว์ในกล่อง Database (ให้คำนวณ Zone สดๆ)
+    // 📌 5. ปรับให้มีแถบสีเตือนภัยในกล่อง Database
     function createDbEntryHTML(data) {
       const vrmsValue = parseFloat(data.vrms || 0);
       const vrms = vrmsValue.toFixed(2);
-      
-      // 📌 ดึงค่า Zone จาก Database มาแสดงตรงๆ เลย (ไม่ต้องให้เว็บคำนวณใหม่แล้ว)
       const zone = data.zone || 'A'; 
-      
       const timeStr = formatThaiDateString(data.timestamp);
-      return `<div class="db-entry">
-        vrms : ${vrms} mm/s<br>
-        zone : ${zone}<br>
-        Time : ${timeStr}
+      
+      // กำหนดสีตาม Zone
+      let zoneColor = '#4CAF50'; // สีเขียว (A)
+      if (zone === 'B') zoneColor = '#2196F3'; // สีฟ้า (B)
+      else if (zone === 'C') zoneColor = '#FFC107'; // สีเหลือง (C)
+      else if (zone === 'D') zoneColor = '#F44336'; // สีแดง (D)
+      
+      return `<div class="db-entry" style="border-left: 5px solid ${zoneColor}; padding-left: 12px; background: #fff; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <strong style="color: ${zoneColor}; font-size: 1.1em;">Zone ${zone}</strong> <br>
+        ความสั่น: ${vrms} mm/s <br>
+        <span style="color: #888; font-size: 0.85em;">เวลา: ${timeStr}</span>
       </div>`;
     }
     
