@@ -290,8 +290,8 @@
       const vrmsValue = parseFloat(data.vrms || 0);
       const vrms = vrmsValue.toFixed(2);
       
-      // 📌 ให้หน้าเว็บคำนวณ Zone ใหม่จากตัวเลข vrms เลย (จะได้เปลี่ยนตาม Class ที่เลือกเป๊ะๆ)
-      const zone = calculateCurrentZone(vrmsValue); 
+      // 📌 ดึงค่า Zone จาก Database มาแสดงตรงๆ เลย (ไม่ต้องให้เว็บคำนวณใหม่แล้ว)
+      const zone = data.zone || 'A'; 
       
       const timeStr = formatThaiDateString(data.timestamp);
       return `<div class="db-entry">
@@ -346,10 +346,9 @@
               const newEntry = createDbEntryHTML(message.data);
               dbContainer.insertAdjacentHTML('afterbegin', newEntry);
               
-            } else if (message.type === 'machineClassChanged') {
-              currentMachineClass = message.machineClass;
+            } else if (message.type === 'classUpdate') { // 📌 เปลี่ยนชื่อให้ตรงกับ Server
+              currentMachineClass = message.currentClass; // 📌 เปลี่ยนมารับตัวแปร currentClass
               renderMachineClassButtons();
-              if (message.latestData) updateDashboard(message.latestData);
             }
           } catch (error) {
             console.error('Error parsing message:', error);
