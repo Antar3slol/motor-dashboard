@@ -623,8 +623,8 @@
         }
 
         let csvContent = '\uFEFF';
-        // 1. อัปเดตหัวตาราง (Header) ให้มีคอลัมน์ Zone แยก 3 แกน และ Zone ภาพรวม
-        csvContent += "วันที่และเวลา,แกน X (mm/s),Zone X,แกน Y (mm/s),Zone Y,แกน Z (mm/s),Zone Z,Zone ภาพรวม\n";
+        // 1. อัปเดตหัวตาราง (Header) ให้มีคอลัมน์ Zone แยก 3 แกน
+        csvContent += "วันที่และเวลา,แกน X (mm/s),Zone X,แกน Y (mm/s),Zone Y,แกน Z (mm/s),Zone Z\n";
 
         data.forEach(row => {
           const timeStr = formatThaiDateString(row.timestamp);
