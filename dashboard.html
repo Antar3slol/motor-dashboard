@@ -377,19 +377,33 @@
     }
 
     function createDbEntryHTML(data) {
-      const vx = parseFloat(data.x || 0).toFixed(2);
-      const vy = parseFloat(data.y || 0).toFixed(2);
-      const vz = parseFloat(data.z || 0).toFixed(2);
+      const vx = parseFloat(data.x || 0);
+      const vy = parseFloat(data.y || 0);
+      const vz = parseFloat(data.z || 0);
       
-      const zone = data.zone || 'A';
+      // 1. คำนวณ Zone แยกทีละแกน
+      const zoneX = calculateCurrentZone(vx);
+      const zoneY = calculateCurrentZone(vy);
+      const zoneZ = calculateCurrentZone(vz);
+
+      // 2. ดึงสีตาม Zone ของแต่ละแกน
+      const colorX = zoneConfig[zoneX] ? zoneConfig[zoneX].color : '#10b981';
+      const colorY = zoneConfig[zoneY] ? zoneConfig[zoneY].color : '#10b981';
+      const colorZ = zoneConfig[zoneZ] ? zoneConfig[zoneZ].color : '#10b981';
+
+      // 3. หา Zone ภาพรวม (แกนที่ค่าความสั่นสูงที่สุด) เพื่อใช้เป็นสีแถบด้านซ้าย
+      const maxVrms = Math.max(vx, vy, vz);
+      const overallZone = calculateCurrentZone(maxVrms);
+      const overallColor = zoneConfig[overallZone] ? zoneConfig[overallZone].color : '#10b981';
+
       const timeStr = formatThaiDateString(data.timestamp);
       
-      let zoneColor = zoneConfig[zone] ? zoneConfig[zone].color : '#10b981';
-      return `<div class="db-entry" style="border-left: 5px solid ${zoneColor}; padding-left: 12px; background: #fff; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <strong style="color: ${zoneColor}; font-size: 1.1em;">Zone ${zone}</strong> <br>
-        <span style="color:#2563eb; font-weight:bold;">X: ${vx}</span> |
-        <span style="color:#0f766e; font-weight:bold;">Y: ${vy}</span> | 
-        <span style="color:#ea580c; font-weight:bold;">Z: ${vz}</span> mm/s <br>
+      // 4. นำ Zone แต่ละแกนไปแสดงผลใน HTML
+      return `<div class="db-entry" style="border-left: 5px solid ${overallColor}; padding-left: 12px; background: #fff; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <strong style="color: ${overallColor}; font-size: 1.1em;">ภาพรวม: Zone ${overallZone}</strong> <br>
+        <span style="color:#2563eb; font-weight:bold;">X: ${vx.toFixed(2)} <span style="color:${colorX}; font-size: 0.9em;">(Zone ${zoneX})</span></span> |
+        <span style="color:#0f766e; font-weight:bold;">Y: ${vy.toFixed(2)} <span style="color:${colorY}; font-size: 0.9em;">(Zone ${zoneY})</span></span> | 
+        <span style="color:#ea580c; font-weight:bold;">Z: ${vz.toFixed(2)} <span style="color:${colorZ}; font-size: 0.9em;">(Zone ${zoneZ})</span></span> <span style="color: #666; font-size: 0.85em;">mm/s</span> <br>
         <span style="color: #888; font-size: 0.85em;">เวลา: ${timeStr}</span>
       </div>`;
     }
@@ -616,17 +630,28 @@
         }
 
         let csvContent = '\uFEFF';
-        csvContent += "วันที่และเวลา,แกน X (mm/s),แกน Y (mm/s),แกน Z (mm/s),Zone\n";
+        // 1. อัปเดตหัวตาราง (Header) ให้มีคอลัมน์ Zone แยก 3 แกน และ Zone ภาพรวม
+        csvContent += "วันที่และเวลา,แกน X (mm/s),Zone X,แกน Y (mm/s),Zone Y,แกน Z (mm/s),Zone Z,Zone ภาพรวม\n";
 
         data.forEach(row => {
           const timeStr = formatThaiDateString(row.timestamp);
-          const vx = parseFloat(row.x || 0).toFixed(2);
-          const vy = parseFloat(row.y || 0).toFixed(2);
-          const vz = parseFloat(row.z || 0).toFixed(2);
-          const zone = row.zone || 'A';
+          const vx = parseFloat(row.x || 0);
+          const vy = parseFloat(row.y || 0);
+          const vz = parseFloat(row.z || 0);
           
-          csvContent += `"${timeStr}","${vx}","${vy}","${vz}","Zone ${zone}"\n`;
+          // 2. คำนวณ Zone ของแต่ละแกนแบบไดนามิก (อิงตาม Class เครื่องจักรที่กำลังเลือกอยู่)
+          const zoneX = calculateCurrentZone(vx);
+          const zoneY = calculateCurrentZone(vy);
+          const zoneZ = calculateCurrentZone(vz);
+          
+          // 3. หา Zone ภาพรวม (จากค่าสั่นสะเทือนที่สูงที่สุด)
+          const maxVrms = Math.max(vx, vy, vz);
+          const overallZone = calculateCurrentZone(maxVrms);
+          
+          // 4. นำข้อมูลจัดเรียงลงแต่ละคอลัมน์
+          csvContent += `"${timeStr}","${vx.toFixed(2)}","Zone ${zoneX}","${vy.toFixed(2)}","Zone ${zoneY}","${vz.toFixed(2)}","Zone ${zoneZ}","Zone ${overallZone}"\n`;
         });
+        
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
