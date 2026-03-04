@@ -16,15 +16,21 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ 100%!'))
   .catch(err => console.error('❌ Error เชื่อมต่อฐานข้อมูล:', err.message));
 
-// 📌 1. โครงสร้างฐานข้อมูลแบบใหม่ (บันทึกแค่ 3 แกน พร้อม Zone ของแต่ละแกน)
+// 📌 1. ปรับโครงสร้าง Database ให้รองรับรูปแบบข้อความ (String) ที่ต้องการ
 const vibrationSchema = new mongoose.Schema({
-  x: Number,
-  y: Number,
-  z: Number,
-  zoneX: String,
-  zoneY: String,
-  zoneZ: String,
-  timestamp: { type: Date, default: Date.now }
+  x: String,
+  y: String,
+  z: String,
+  timestamp: String, // เก็บเวลาเป็นข้อความแบบไทย
+  
+  // ⚠️ ซ่อนค่าตัวเลขดิบไว้ เพื่อให้กราฟ Chart.js บนเว็บดึงไปวาดต่อได้โดยไม่พัง
+  raw_x: Number,
+  raw_y: Number,
+  raw_z: Number,
+  raw_zoneX: String,
+  raw_zoneY: String,
+  raw_zoneZ: String,
+  raw_timestamp: Date
 });
 
 const VibrationData = mongoose.model('VibrationData', vibrationSchema);
@@ -38,7 +44,7 @@ const wss = new WebSocket.Server({ server });
 
 let latestData = { x: 0, y: 0, z: 0, zoneX: 'A', zoneY: 'A', zoneZ: 'A', timestamp: new Date() };
 
-// 📌 2. ฟังก์ชันคำนวณ Zone แยกตาม Class
+// ฟังก์ชันคำนวณ Zone จาก Server
 const machineClassLimits = {
   class1: { A: 2.8, B: 7.1, C: 11.2 },
   class2: { A: 4.5, B: 11.2, C: 18.0 },
@@ -78,8 +84,21 @@ wss.on('connection', async (ws) => {
   ws.on('pong', () => { ws.isAlive = true; });
 
   try {
-    const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
-    ws.send(JSON.stringify({ type: 'init', latest: latestData, history: history.reverse(), machineClass: currentMachineClass }));
+    // 📌 ใช้การเรียงตาม ID (_id) แทน timestamp เพราะ timestamp ตอนนี้เป็น String แล้ว
+    const history = await VibrationData.find().sort({ _id: -1 }).limit(100);
+    
+    // ดึงค่า raw กลับมาแปลงให้ Dashboard ใช้วาดกราฟ
+    const formatForDashboard = history.map(doc => ({
+      x: doc.raw_x !== undefined ? doc.raw_x : parseFloat(doc.x) || 0,
+      y: doc.raw_y !== undefined ? doc.raw_y : parseFloat(doc.y) || 0,
+      z: doc.raw_z !== undefined ? doc.raw_z : parseFloat(doc.z) || 0,
+      zoneX: doc.raw_zoneX || 'A',
+      zoneY: doc.raw_zoneY || 'A',
+      zoneZ: doc.raw_zoneZ || 'A',
+      timestamp: doc.raw_timestamp || new Date()
+    }));
+
+    ws.send(JSON.stringify({ type: 'init', latest: latestData, history: formatForDashboard.reverse(), machineClass: currentMachineClass }));
   } catch (err) {
     console.error('❌ ไม่สามารถดึงประวัติช่วง Init ได้:', err.message);
   }
@@ -93,11 +112,24 @@ wss.on('connection', async (ws) => {
         const vy = parseFloat(msg.y) || 0;
         const vz = parseFloat(msg.z) || 0;
 
-        // 📌 3. คำนวณ Zone แยกทีละแกน
         const zX = calculateZoneServer(vx, currentMachineClass);
         const zY = calculateZoneServer(vy, currentMachineClass);
         const zZ = calculateZoneServer(vz, currentMachineClass);
 
+        const now = new Date();
+        
+        // 📌 2. สร้างเวลาแบบไทย (UTC+7) 
+        const thaiDateStr = now.toLocaleString('th-TH', { 
+          timeZone: 'Asia/Bangkok',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+
+        // 📌 3. เตรียมข้อมูลสำหรับส่งให้ Dashboard (ส่งตัวเลขไป กราฟจะได้วาดได้)
         latestData = {
           x: vx,
           y: vy,
@@ -105,7 +137,7 @@ wss.on('connection', async (ws) => {
           zoneX: zX,
           zoneY: zY,
           zoneZ: zZ,
-          timestamp: new Date()
+          timestamp: now
         };
 
         ws.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
@@ -116,8 +148,24 @@ wss.on('connection', async (ws) => {
           }
         });
 
-        // 📌 4. บันทึกข้อมูลที่ตัด Zone ภาพรวมออกแล้ว ลง Database
-        new VibrationData(latestData).save().catch((err) => {
+        // 📌 4. เตรียมข้อมูลสำหรับบันทึกลง Database (เก็บตาม Format ที่คุณต้องการเป๊ะๆ)
+        const dbData = {
+          x: `${vx.toFixed(2)} mm/s : zone : "${zX}"`,
+          y: `${vy.toFixed(2)} mm/s : zone : "${zY}"`,
+          z: `${vz.toFixed(2)} mm/s : zone : "${zZ}"`,
+          timestamp: thaiDateStr, // จะได้ "4 มี.ค. 2569 15:06:15"
+          
+          // ซ่อนค่าตัวเลขดิบไว้เป็น Backup
+          raw_x: vx,
+          raw_y: vy,
+          raw_z: vz,
+          raw_zoneX: zX,
+          raw_zoneY: zY,
+          raw_zoneZ: zZ,
+          raw_timestamp: now
+        };
+
+        new VibrationData(dbData).save().catch((err) => {
            console.error('❌ ไม่สามารถบันทึกข้อมูลลง DB ได้:', err.message);
         });
       }
@@ -144,8 +192,20 @@ wss.on('close', () => { clearInterval(interval); });
 
 app.get('/api/history', async (req, res) => {
   try {
-    const history = await VibrationData.find().sort({ timestamp: -1 }).limit(1000);
-    res.json(history);
+    const history = await VibrationData.find().sort({ _id: -1 }).limit(1000);
+    
+    // คืนค่า raw กลับไปให้ตอนกดโหลด Excel หรือวาดกราฟใช้งานได้ปกติ
+    const formatForDashboard = history.map(doc => ({
+      x: doc.raw_x !== undefined ? doc.raw_x : parseFloat(doc.x) || 0,
+      y: doc.raw_y !== undefined ? doc.raw_y : parseFloat(doc.y) || 0,
+      z: doc.raw_z !== undefined ? doc.raw_z : parseFloat(doc.z) || 0,
+      zoneX: doc.raw_zoneX || 'A',
+      zoneY: doc.raw_zoneY || 'A',
+      zoneZ: doc.raw_zoneZ || 'A',
+      timestamp: doc.raw_timestamp || new Date()
+    }));
+
+    res.json(formatForDashboard);
   } catch (err) {
     console.error('❌ API History Error:', err.message);
     res.status(500).json({ error: 'Database error' });

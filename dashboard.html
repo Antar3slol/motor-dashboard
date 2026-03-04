@@ -637,12 +637,8 @@
           const zoneY = calculateCurrentZone(vy);
           const zoneZ = calculateCurrentZone(vz);
           
-          // 3. หา Zone ภาพรวม (จากค่าสั่นสะเทือนที่สูงที่สุด)
-          const maxVrms = Math.max(vx, vy, vz);
-          const overallZone = calculateCurrentZone(maxVrms);
-          
           // 4. นำข้อมูลจัดเรียงลงแต่ละคอลัมน์
-          csvContent += `"${timeStr}","${vx.toFixed(2)}","Zone ${zoneX}","${vy.toFixed(2)}","Zone ${zoneY}","${vz.toFixed(2)}","Zone ${zoneZ}","Zone ${overallZone}"\n`;
+          csvContent += `"${timeStr}","${vx.toFixed(2)}","Zone ${zoneX}","${vy.toFixed(2)}","Zone ${zoneY}","${vz.toFixed(2)}","Zone ${zoneZ}"\n`;
         });
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
