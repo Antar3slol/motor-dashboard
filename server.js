@@ -129,4 +129,4 @@ app.get('/api/history', async (req, res) => {
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
-server.listen(PORT, '0.0.0.0', () => { console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`); });
+server.listen(PORT, '0.0.0.0', () => { console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`); })};
