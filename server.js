@@ -64,7 +64,9 @@ wss.on('connection', async (ws) => {
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
     ws.send(JSON.stringify({ type: 'init', latest: latestData, history: history.reverse(), machineClass: currentMachineClass }));
-  } catch (err) {}
+  } catch (err) {
+    console.error('❌ ไม่สามารถดึงประวัติช่วง Init ได้:', err.message); // เพิ่ม Error Log
+  }
 
   // 📌 จุดรับข้อมูลที่ถูกต้อง ต้องอยู่ในบล็อกนี้!
   ws.on('message', (message) => {
@@ -77,7 +79,7 @@ wss.on('connection', async (ws) => {
           x: parseFloat(msg.x) || 0,
           y: parseFloat(msg.y) || 0,
           z: parseFloat(msg.z) || 0,
-          zone: msg.zone || 'A',
+          zone: msg.zone || 'A', // หมายเหตุ: zone ควรอัปเดตให้ตรงกับ Class
           timestamp: new Date()
         };
 
@@ -89,7 +91,10 @@ wss.on('connection', async (ws) => {
           }
         });
 
-        new VibrationData(latestData).save().catch(()=>{});
+        // เพิ่มการดักจับ Error หาก Save ไม่สำเร็จ
+        new VibrationData(latestData).save().catch((err) => {
+           console.error('❌ ไม่สามารถบันทึกข้อมูลลง DB ได้:', err.message);
+        });
       }
       else {
         let parsedClass = extractClass(msg.machineClass || msg.className || msg.class || msg.value || msg.data);
@@ -102,7 +107,9 @@ wss.on('connection', async (ws) => {
           });
         }
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error('❌ ได้รับข้อมูลที่ไม่ได้อยู่ในฟอร์แมต JSON:', message.toString()); // เพิ่ม Error Log
+    }
   });
 
   ws.on('close', () => console.log('❌ อุปกรณ์ยกเลิกการเชื่อมต่อ WebSocket'));
@@ -116,6 +123,7 @@ app.get('/api/history', async (req, res) => {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(1000);
     res.json(history);
   } catch (err) {
+    console.error('❌ API History Error:', err.message); // เพิ่ม Error Log
     res.status(500).json({ error: 'Database error' });
   }
 });
