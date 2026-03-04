@@ -16,16 +16,14 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ 100%!'))
   .catch(err => console.error('❌ Error เชื่อมต่อฐานข้อมูล:', err.message));
 
-// 📌 1. อัปเดตโครงสร้างฐานข้อมูล (เพิ่ม zoneX, zoneY, zoneZ)
+// 📌 1. โครงสร้างฐานข้อมูลแบบใหม่ (บันทึกแค่ 3 แกน พร้อม Zone ของแต่ละแกน)
 const vibrationSchema = new mongoose.Schema({
-  vrms: Number,
   x: Number,
   y: Number,
   z: Number,
-  zone: String,       // Zone ภาพรวม
-  zoneX: String,      // Zone ของแกน X
-  zoneY: String,      // Zone ของแกน Y
-  zoneZ: String,      // Zone ของแกน Z
+  zoneX: String,
+  zoneY: String,
+  zoneZ: String,
   timestamp: { type: Date, default: Date.now }
 });
 
@@ -38,9 +36,9 @@ app.use(express.static(__dirname));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-let latestData = { vrms: 0, x: 0, y: 0, z: 0, zone: 'A', zoneX: 'A', zoneY: 'A', zoneZ: 'A', timestamp: new Date() };
+let latestData = { x: 0, y: 0, z: 0, zoneX: 'A', zoneY: 'A', zoneZ: 'A', timestamp: new Date() };
 
-// 📌 2. เพิ่มเกณฑ์การประเมิน Zone ไว้ฝั่ง Server (เพื่อให้คำนวณก่อนลง Database)
+// 📌 2. ฟังก์ชันคำนวณ Zone แยกตาม Class
 const machineClassLimits = {
   class1: { A: 2.8, B: 7.1, C: 11.2 },
   class2: { A: 4.5, B: 11.2, C: 18.0 },
@@ -95,20 +93,15 @@ wss.on('connection', async (ws) => {
         const vy = parseFloat(msg.y) || 0;
         const vz = parseFloat(msg.z) || 0;
 
-        // 📌 3. คำนวณ Zone แยกแต่ละแกนแบบ Real-time ตาม Class ปัจจุบัน
+        // 📌 3. คำนวณ Zone แยกทีละแกน
         const zX = calculateZoneServer(vx, currentMachineClass);
         const zY = calculateZoneServer(vy, currentMachineClass);
         const zZ = calculateZoneServer(vz, currentMachineClass);
-        
-        const maxVrms = Math.max(vx, vy, vz);
-        const overallZone = calculateZoneServer(maxVrms, currentMachineClass);
 
         latestData = {
-          vrms: maxVrms, 
           x: vx,
           y: vy,
           z: vz,
-          zone: overallZone,
           zoneX: zX,
           zoneY: zY,
           zoneZ: zZ,
@@ -123,7 +116,7 @@ wss.on('connection', async (ws) => {
           }
         });
 
-        // บันทึกข้อมูลที่คำนวณ Zone ครบแล้วลง MongoDB
+        // 📌 4. บันทึกข้อมูลที่ตัด Zone ภาพรวมออกแล้ว ลง Database
         new VibrationData(latestData).save().catch((err) => {
            console.error('❌ ไม่สามารถบันทึกข้อมูลลง DB ได้:', err.message);
         });

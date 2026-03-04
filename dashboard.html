@@ -381,29 +381,22 @@
       const vy = parseFloat(data.y || 0);
       const vz = parseFloat(data.z || 0);
       
-      // 1. คำนวณ Zone แยกทีละแกน
-      const zoneX = calculateCurrentZone(vx);
-      const zoneY = calculateCurrentZone(vy);
-      const zoneZ = calculateCurrentZone(vz);
+      // ดึงข้อมูล Zone หรือคำนวณใหม่หากไม่มี
+      const zoneX = data.zoneX || calculateCurrentZone(vx);
+      const zoneY = data.zoneY || calculateCurrentZone(vy);
+      const zoneZ = data.zoneZ || calculateCurrentZone(vz);
 
-      // 2. ดึงสีตาม Zone ของแต่ละแกน
-      const colorX = zoneConfig[zoneX] ? zoneConfig[zoneX].color : '#10b981';
-      const colorY = zoneConfig[zoneY] ? zoneConfig[zoneY].color : '#10b981';
-      const colorZ = zoneConfig[zoneZ] ? zoneConfig[zoneZ].color : '#10b981';
-
-      // 3. หา Zone ภาพรวม (แกนที่ค่าความสั่นสูงที่สุด) เพื่อใช้เป็นสีแถบด้านซ้าย
+      // ใช้สีของแกนที่สั่นหนักสุดเป็นสีแถบเส้นด้านซ้าย (เพื่อให้รู้ความรุนแรงภาพรวมได้ง่าย)
       const maxVrms = Math.max(vx, vy, vz);
-      const overallZone = calculateCurrentZone(maxVrms);
-      const overallColor = zoneConfig[overallZone] ? zoneConfig[overallZone].color : '#10b981';
+      const maxZone = calculateCurrentZone(maxVrms);
+      const borderColor = zoneConfig[maxZone] ? zoneConfig[maxZone].color : '#e2e8f0';
 
       const timeStr = formatThaiDateString(data.timestamp);
       
-      // 4. นำ Zone แต่ละแกนไปแสดงผลใน HTML
-      return `<div class="db-entry" style="border-left: 5px solid ${overallColor}; padding-left: 12px; background: #fff; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <strong style="color: ${overallColor}; font-size: 1.1em;">ภาพรวม: Zone ${overallZone}</strong> <br>
-        <span style="color:#2563eb; font-weight:bold;">X: ${vx.toFixed(2)} <span style="color:${colorX}; font-size: 0.9em;">(Zone ${zoneX})</span></span> |
-        <span style="color:#0f766e; font-weight:bold;">Y: ${vy.toFixed(2)} <span style="color:${colorY}; font-size: 0.9em;">(Zone ${zoneY})</span></span> | 
-        <span style="color:#ea580c; font-weight:bold;">Z: ${vz.toFixed(2)} <span style="color:${colorZ}; font-size: 0.9em;">(Zone ${zoneZ})</span></span> <span style="color: #666; font-size: 0.85em;">mm/s</span> <br>
+      return `<div class="db-entry" style="border-left: 5px solid ${borderColor}; padding-left: 12px; background: #fff; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <span style="color:#2563eb; font-weight:bold;">X: ${vx.toFixed(2)} (Zone ${zoneX})</span> | 
+        <span style="color:#0f766e; font-weight:bold;">Y: ${vy.toFixed(2)} (Zone ${zoneY})</span> | 
+        <span style="color:#ea580c; font-weight:bold;">Z: ${vz.toFixed(2)} (Zone ${zoneZ})</span> <span style="font-weight:bold;">mm/s</span> <br>
         <span style="color: #888; font-size: 0.85em;">เวลา: ${timeStr}</span>
       </div>`;
     }
