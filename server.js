@@ -1,4 +1,4 @@
-require('dotenv').config(); // 📌 1. เรียกใช้ Environment Variables
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const WebSocket = require('ws');
@@ -10,19 +10,33 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 let currentMachineClass = 'class2';
-
-// 📌 1. ดึงรหัสผ่านจาก Environment Variable ของ Render แทนการเขียนลงโค้ดตรงๆ
 const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ 100%!'))
   .catch(err => console.error('❌ Error เชื่อมต่อฐานข้อมูล:', err.message));
 
+// 📌 1. เพิ่มแกน X, Y, Z ในตารางฐานข้อมูล
+// เพิ่มแกน x, y, z ลงใน Schema ฐานข้อมูล
 const vibrationSchema = new mongoose.Schema({
   vrms: Number,
+  x: Number,
+  y: Number,
+  z: Number,
   zone: String,
   timestamp: { type: Date, default: Date.now }
 });
+
+// ... และตรงจุดที่รับข้อมูลจากเซนเซอร์
+      if (msg.type === 'sensor') {
+        latestData = {
+          vrms: parseFloat(msg.vrms) || 0,
+          x: parseFloat(msg.x) || 0,
+          y: parseFloat(msg.y) || 0,
+          z: parseFloat(msg.z) || 0,
+          zone: msg.zone || 'A',
+          timestamp: new Date() 
+        };
 
 const VibrationData = mongoose.model('VibrationData', vibrationSchema);
 
@@ -33,7 +47,7 @@ app.use(express.static(__dirname));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-let latestData = { vrms: 0, zone: 'A', timestamp: new Date() };
+let latestData = { vrms: 0, x: 0, y: 0, z: 0, zone: 'A', timestamp: new Date() };
 
 function extractClass(raw) {
     if (!raw) return null;
@@ -45,20 +59,18 @@ function extractClass(raw) {
     return null;
 }
 
-// 📌 3. ระบบ Ping/Pong กัน Render ตัดสาย (Keep-alive)
 const interval = setInterval(() => {
   wss.clients.forEach((client) => {
     if (client.isAlive === false) return client.terminate();
     client.isAlive = false;
-    client.ping(); // ส่งสัญญาณหัวใจเต้นไปหาหน้าเว็บและบอร์ด
+    client.ping(); 
   });
-}, 30000); // ทำทุกๆ 30 วินาที
+}, 30000); 
 
 wss.on('connection', async (ws) => {
   console.log('✅ มีอุปกรณ์เชื่อมต่อ WebSocket เข้ามาแล้ว');
-  
   ws.isAlive = true;
-  ws.on('pong', () => { ws.isAlive = true; }); // ถ้ารับ Pong กลับมา แปลว่ายังมีชีวิตอยู่
+  ws.on('pong', () => { ws.isAlive = true; }); 
 
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
@@ -70,10 +82,14 @@ wss.on('connection', async (ws) => {
       const msg = JSON.parse(message);
 
       if (msg.type === 'sensor') {
+        // 📌 2. รับค่า X, Y, Z มาบันทึก
         latestData = {
           vrms: parseFloat(msg.vrms) || 0,
+          x: parseFloat(msg.x) || 0,
+          y: parseFloat(msg.y) || 0,
+          z: parseFloat(msg.z) || 0,
           zone: msg.zone || 'A',
-          timestamp: new Date() // 📌 2. ลบสูตร +7 ออก บันทึกเป็นเวลาสากล (UTC) ปกติ เพื่อให้เบราว์เซอร์ฝั่งคนดูคำนวณเวลาไทยให้เอง
+          timestamp: new Date() 
         };
 
         ws.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
@@ -90,7 +106,6 @@ wss.on('connection', async (ws) => {
         let parsedClass = extractClass(msg.machineClass || msg.className || msg.class || msg.value || msg.data);
         if (parsedClass) {
           currentMachineClass = parsedClass;
-          console.log('⚙️ หน้าเว็บสั่งเปลี่ยนสเปคเป็น:', currentMachineClass);
           wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
@@ -100,8 +115,6 @@ wss.on('connection', async (ws) => {
       }
     } catch(e) {}
   });
-
-  ws.on('close', () => console.log('❌ อุปกรณ์ยกเลิกการเชื่อมต่อ WebSocket'));
 });
 
 wss.on('close', () => { clearInterval(interval); });

@@ -3,97 +3,154 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Motor Vibration Dashboard - Real-time Monitoring</title>
+  <title>Motor Vibration Dashboard - 3 Axis Monitoring</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 20px; min-height: 100vh;
+      /* เปลี่ยนพื้นหลังเป็นสีเทาเข้มอมกรมท่า (Dark Slate) ให้ดูพรีเมียมและเคร่งขรึมขึ้น */
+      background: linear-gradient(135deg, #334155 0%, #0f172a 100%); 
+      padding: 20px; 
+      min-height: 100vh;
     }
-    .container { max-width: 1400px; margin: 0 auto; }
-    .header { text-align: center; margin-bottom: 30px; }
-    h1 { color: white; font-size: 2.5em; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); margin-bottom: 10px; }
-    .subtitle { color: rgba(255,255,255,0.9); font-size: 1.1em; }
+    
+    /* 📌 แก้ไขให้ตรงกลาง 100% ด้วย Flexbox */
+    .header { 
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center; 
+      margin-bottom: 30px; 
+    }
+    
+    h1 { 
+      /* เปลี่ยนตัวหนังสือกลับเป็นสีขาว เพื่อให้ตัดกับพื้นหลังเข้ม */
+      color: #ffffff;
+      font-size: 2.5em; 
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.4); /* เพิ่มเงากลับมานิดนึงให้ตัวหนังสือลอยเด่น */
+      margin-bottom: 10px;
+    }
+    
+    .subtitle { 
+      /* เปลี่ยนสีคำบรรยายเป็นสีเทาอ่อนสว่างๆ */
+      color: #cbd5e1; 
+      font-size: 1.1em;
+    }
+    
+    /* 📌 ปรับปรุงปุ่มสถานะให้ดูสวยงามขึ้นและอยู่กึ่งกลาง */
     .connection-status {
-      background: rgba(255,255,255,0.2); color: white; padding: 12px 24px;
-      border-radius: 25px; display: inline-flex; align-items: center; gap: 10px;
-      margin-top: 15px; font-size: 1em; backdrop-filter: blur(10px);
+      background: #ffffff;
+      color: #333; 
+      padding: 10px 24px;
+      border-radius: 30px; 
+      display: flex; /* ใช้ flex จัดการเนื้อหาภายใน */
+      align-items: center; 
+      justify-content: center;
+      gap: 10px;
+      margin-top: 15px; 
+      font-size: 1em;
+      font-weight: 500;
+      width: fit-content; /* ให้กล่องพอดีกับตัวหนังสือ */
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); /* เพิ่มเงาบางๆ */
     }
+    
     .status-dot { width: 12px; height: 12px; border-radius: 50%; animation: pulse 2s infinite; }
-    .status-online { background: #4CAF50; }
-    .status-offline { background: #F44336; animation: none; }
+    .status-online { background: #10b981; } /* ปรับสีเขียวให้เข้ากับชุดสีใหม่ */
+    .status-offline { background: #ef4444; animation: none; }
+    
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.6; transform: scale(1.1); }
     }
+    
     .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 20px; }
+    
     .metric-card {
-      background: white; border-radius: 15px; padding: 25px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.3s ease, box-shadow 0.3s ease;
+      background: white; 
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08); /* ปรับเงาให้ซอฟต์ลง */
+      transition: transform 0.3s ease, box-shadow 0.3s ease; 
+      text-align: center;
     }
-    .metric-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,0,0,0.3); }
-    .metric-label { font-size: 0.9em; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
-    .metric-value {
-      font-size: 3em; font-weight: bold; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 5px;
+    
+    .metric-card:hover { 
+      transform: translateY(-5px); 
+      box-shadow: 0 15px 40px rgba(0,0,0,0.12);
     }
-    .metric-unit { font-size: 1em; color: #999; }
-    .zone-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; }
+    
+    .metric-label { font-size: 1em; margin-bottom: 10px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
+    .metric-value { font-size: 3em; font-weight: bold; margin-bottom: 5px; }
+    .metric-unit { font-size: 0.9em; color: #999; }
+    
+    .val-x { color: #2563eb; } /* สีน้ำเงินเข้ม */
+    .val-y { color: #0f766e; } /* สีเขียวอมฟ้า */
+    .val-z { color: #ea580c; } /* สีส้ม */
+
     .zone-indicator {
-      display: inline-block; padding: 15px 40px; border-radius: 30px;
-      font-size: 1.8em; font-weight: bold; margin: 15px 0; transition: all 0.3s ease;
+      display: inline-block; padding: 8px 25px;
+      border-radius: 30px;
+      font-size: 1.1em; font-weight: bold; margin: 15px 0 5px 0; transition: all 0.3s ease;
     }
-    .zone-A { background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4); }
-    .zone-B { background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; box-shadow: 0 5px 15px rgba(33, 150, 243, 0.4); }
-    .zone-C { background: linear-gradient(135deg, #FFC107 0%, #FFA000 100%); color: white; box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4); }
-    .zone-D { background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%); color: white; box-shadow: 0 5px 15px rgba(244, 67, 54, 0.4); animation: alertPulse 1s infinite; }
+    .zone-A { background: #10b981; color: white; } /* Emerald Green */
+    .zone-B { background: #3b82f6; color: white; } /* Blue */
+    .zone-C { background: #f59e0b; color: white; } /* Amber */
+    .zone-D { background: #ef4444; color: white; animation: alertPulse 1s infinite; } /* Red */
     @keyframes alertPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-    .zone-description { font-size: 1.1em; color: #666; margin-top: 10px; }
-    .zone-icon { font-size: 3em; margin-bottom: 10px; }
-    .chart-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; }
+    .zone-description { font-size: 0.95em; color: #64748b; margin-top: 5px; }
+    
+    .chart-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 20px; }
     .chart-title { font-size: 1.3em; font-weight: bold; color: #333; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
     .chart-container { position: relative; height: 350px; }
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
-    .stat-box { background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 15px; border-radius: 10px; text-align: center; }
-    .stat-label { font-size: 0.85em; color: #666; margin-bottom: 5px; }
-    .stat-value { font-size: 1.5em; font-weight: bold; color: #667eea; }
     
-    /* 📌 ส่วนที่เพิ่มใหม่สำหรับกล่อง Database */
-    .database-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; }
-    .db-header { font-size: 1.3em; font-weight: bold; color: #333; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 20px; }
+    .stat-box { background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center; border: 1px solid #f1f5f9; }
+    .stat-label { font-size: 1em; font-weight: bold; margin-bottom: 10px; }
+    .stat-flex { display: flex; justify-content: space-around; }
+    .stat-flex div { text-align: center; }
+    .stat-flex small { color: #888; font-size: 0.8em; text-transform: uppercase; }
+    .stat-value { font-size: 1.3em; font-weight: bold; display: block; margin-top: 5px; }
+    
+    .database-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 20px; }
+    .db-header { font-size: 1.3em; font-weight: bold; color: #333; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .db-container { max-height: 400px; overflow-y: auto; background: #f8f9fa; border-radius: 10px; padding: 15px; border: 1px solid #eee; }
-    .db-entry { border-bottom: 1px dashed #ccc; padding-bottom: 10px; margin-bottom: 10px; font-family: 'Courier New', Courier, monospace; font-size: 15px; color: #444; line-height: 1.6; }
+    .db-entry { border-bottom: 1px dashed #ccc; padding-bottom: 10px; margin-bottom: 10px; font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #444; line-height: 1.6; }
     .db-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
     
-    .last-update { text-align: center; color: rgba(255,255,255,0.8); margin-top: 20px; font-size: 0.95em; }
-    .machine-class-selector { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; }
+    .last-update { text-align: center; color: #64748b; margin-top: 20px; font-size: 0.95em; }
+    
+    .machine-class-selector { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 20px; }
     .selector-title { font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
     .class-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-    .class-btn { background: white; border: 2px solid #e0e0e0; border-radius: 12px; padding: 15px; cursor: pointer; transition: all 0.3s ease; text-align: left; }
-    .class-btn:hover { border-color: #667eea; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2); }
-    .class-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color: #667eea; color: white; box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+    .class-btn { background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 15px; cursor: pointer; transition: all 0.3s ease; text-align: left; }
+    .class-btn:hover { border-color: #94a3b8; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .class-btn.active { background: #1e293b; border-color: #1e293b; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .class-btn-title { font-size: 1.1em; font-weight: bold; margin-bottom: 5px; }
     .class-btn.active .class-btn-title { color: white; }
-    .class-btn-desc { font-size: 0.85em; color: #666; line-height: 1.4; }
+    .class-btn-desc { font-size: 0.85em; color: #64748b; line-height: 1.4; }
     .class-btn.active .class-btn-desc { color: rgba(255,255,255,0.9); }
-    .class-btn-zones { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1); font-size: 0.8em; }
-    .class-btn.active .class-btn-zones { border-top-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.85); }
+    .class-btn-zones { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.05); font-size: 0.8em; }
+    .class-btn.active .class-btn-zones { border-top-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.85); }
     .zone-range { display: flex; justify-content: space-between; margin-top: 3px; }
-    .current-class-info { background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 15px; border-radius: 10px; margin-top: 15px; font-size: 0.9em; }
-    .current-class-info strong { color: #667eea; }
+    
+    .current-class-info { background: #f8fafc; padding: 15px; border-radius: 10px; margin-top: 15px; font-size: 0.95em; border: 1px solid #e2e8f0; }
+    .current-class-info strong { color: #1e293b; }
+    
     @media (max-width: 768px) {
       h1 { font-size: 1.8em; } .metric-value { font-size: 2.2em; }
-      .zone-indicator { font-size: 1.4em; padding: 12px 30px; } .chart-container { height: 250px; }
+      .zone-indicator { font-size: 1.1em; padding: 8px 20px; } 
+      .chart-container { height: 250px; }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>🔧 ระบบวัดความสั่นมอเตอร์อัจฉริยะ</h1>
-      <p class="subtitle">Smart Motor Vibration Monitoring System</p>
+      <h1>ระบบวัดความสั่นมอเตอร์อัจฉริยะ</h1>
+      <p class="subtitle">Smart Motor Vibration System</p>
       <div class="connection-status">
         <span class="status-dot status-offline" id="statusDot"></span>
         <span id="connectionStatus">กำลังเชื่อมต่อ...</span>
@@ -110,54 +167,71 @@
     </div>
     
     <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-label">⚡ ความเร็วการสั่น</div>
-        <div class="metric-value" id="vrmsValue">0.00</div>
-        <div class="metric-unit">mm/s (Velocity RMS)</div>
+      <div class="metric-card" style="border-bottom: 4px solid #2563eb;">
+        <div class="metric-label val-x">แนวนอน (แกน X)</div>
+        <div class="metric-value val-x" id="xValue">0.00</div>
+        <div class="metric-unit">mm/s (RMS)</div>
+        <div class="zone-indicator zone-A" id="zoneIndicatorX">Zone A</div>
+        <div class="zone-description" id="zoneDescriptionX">สภาพดีเยี่ยม</div>
+      </div>
+     
+      <div class="metric-card" style="border-bottom: 4px solid #0f766e;">
+        <div class="metric-label val-y">แนวตั้ง (แกน Y)</div>
+        <div class="metric-value val-y" id="yValue">0.00</div>
+        <div class="metric-unit">mm/s (RMS)</div>
+        <div class="zone-indicator zone-A" id="zoneIndicatorY">Zone A</div>
+        <div class="zone-description" id="zoneDescriptionY">สภาพดีเยี่ยม</div>
       </div>
       
-      <div class="zone-card">
-        <div class="metric-label">📊 สถานะเครื่องจักร</div>
-        <div class="zone-icon" id="zoneIcon">✓</div>
-        <div class="zone-indicator zone-A" id="zoneIndicator">Zone A</div>
-        <div class="zone-description" id="zoneDescription">สภาพดีเยี่ยม</div>
+      <div class="metric-card" style="border-bottom: 4px solid #ea580c;">
+        <div class="metric-label val-z">แนวแกน (แกน Z)</div>
+        <div class="metric-value val-z" id="zValue">0.00</div>
+        <div class="metric-unit">mm/s (RMS)</div>
+        <div class="zone-indicator zone-A" id="zoneIndicatorZ">Zone A</div>
+        <div class="zone-description" id="zoneDescriptionZ">สภาพดีเยี่ยม</div>
       </div>
     </div>
     
     <div class="chart-card">
       <div class="chart-title">
         <span>📈</span>
-        <span>กราฟความสั่นสะเทือนแบบเรียลไทม์</span>
+        <span>กราฟความสั่นสะเทือนแบบเรียลไทม์ (3 แกน)</span>
       </div>
       <div class="chart-container">
         <canvas id="vibrationChart"></canvas>
       </div>
+      
       <div class="stats-grid">
-        <div class="stat-box">
-          <div class="stat-label">ค่าต่ำสุด</div>
-          <div class="stat-value" id="minValue">0.00</div>
+        <div class="stat-box" style="border-top: 3px solid #2563eb;">
+          <div class="stat-label val-x">สถิติแกน X</div>
+          <div class="stat-flex">
+            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-x" id="minX">0.00</span></div>
+            <div><small>สูงสุด (Max)</small><span class="stat-value val-x" id="maxX">0.00</span></div>
+          </div>
         </div>
-        <div class="stat-box">
-          <div class="stat-label">ค่าสูงสุด</div>
-          <div class="stat-value" id="maxValue">0.00</div>
+        <div class="stat-box" style="border-top: 3px solid #0f766e;">
+          <div class="stat-label val-y">สถิติแกน Y</div>
+          <div class="stat-flex">
+            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-y" id="minY">0.00</span></div>
+            <div><small>สูงสุด (Max)</small><span class="stat-value val-y" id="maxY">0.00</span></div>
+          </div>
         </div>
-        <div class="stat-box">
-          <div class="stat-label">ค่าเฉลี่ย</div>
-          <div class="stat-value" id="avgValue">0.00</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">จุดข้อมูล</div>
-          <div class="stat-value" id="dataCount">0</div>
+        <div class="stat-box" style="border-top: 3px solid #ea580c;">
+          <div class="stat-label val-z">สถิติแกน Z</div>
+          <div class="stat-flex">
+            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-z" id="minZ">0.00</span></div>
+            <div><small>สูงสุด (Max)</small><span class="stat-value val-z" id="maxZ">0.00</span></div>
+          </div>
         </div>
       </div>
     </div>
     
     <div class="database-card">
-      <div class="db-header" style="justify-content: space-between;">
+      <div class="db-header">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span>ข้อมูลจาก Database</span>
         </div>
-        <button onclick="exportToCSV()" style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 0.9em; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: 0.3s;">
+        <button onclick="exportToCSV()" style="background: #10b981; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 0.9em; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: 0.3s;">
           📥 ดาวน์โหลด Excel (CSV)
         </button>
       </div>
@@ -176,7 +250,7 @@
     const WS_URL = `${WS_PROTOCOL}//${window.location.host}`;
     
     let chart;
-    let dataPoints = [];
+    let dataPoints = { time: [], x: [], y: [], z: [] };
     const MAX_POINTS = 50;
     let ws;
     let reconnectAttempts = 0;
@@ -227,86 +301,95 @@
     let currentMachineClass = 'class2';
     
     const zoneConfig = {
-      'A': { icon: '✓', text: 'สภาพดีเยี่ยม', color: '#4CAF50' },
-      'B': { icon: '⚠', text: 'ยอมรับได้', color: '#2196F3' },
-      'C': { icon: '⚠', text: 'ไม่น่าพอใจ - ควรตรวจสอบ', color: '#FFC107' },
-      'D': { icon: '⛔', text: 'อันตราย - ต้องหยุดเครื่อง!', color: '#F44336' }
+      'A': { text: 'สภาพดีเยี่ยม', color: '#10b981' },
+      'B': { text: 'ยอมรับได้', color: '#3b82f6' },
+      'C': { text: 'ไม่น่าพอใจ - ควรตรวจสอบ', color: '#f59e0b' },
+      'D': { text: 'อันตราย - ต้องหยุดเครื่อง!', color: '#ef4444' }
     };
-    
+
     const ctx = document.getElementById('vibrationChart').getContext('2d');
     chart = new Chart(ctx, {
       type: 'line',
       data: {
         labels: [],
-        datasets: [{
-          label: 'Velocity RMS (mm/s)',
-          data: [],
-          borderColor: '#667eea',
-          backgroundColor: 'rgba(102, 126, 234, 0.1)',
-          borderWidth: 3,
-          tension: 0.4,
-          fill: true,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: '#667eea',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        }]
+        datasets: [
+          {
+            label: 'แกน X',
+            data: [],
+            borderColor: '#2563eb', 
+            backgroundColor: 'rgba(37, 99, 235, 0.1)', 
+            borderWidth: 2,
+            tension: 0.4,
+            pointRadius: 3
+          },
+          {
+            label: 'แกน Y',
+            data: [],
+            borderColor: '#0f766e', 
+            backgroundColor: 'rgba(15, 118, 110, 0.1)',
+            borderWidth: 2,
+            tension: 0.4,
+            pointRadius: 3
+          },
+          {
+            label: 'แกน Z',
+            data: [],
+            borderColor: '#ea580c', 
+            backgroundColor: 'rgba(234, 88, 12, 0.1)',
+            borderWidth: 2,
+            tension: 0.4,
+            pointRadius: 3
+          }
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: { display: true, position: 'top', labels: { font: { size: 14, weight: 'bold' }, color: '#333' } },
-          tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', titleFont: { size: 14 }, bodyFont: { size: 13 }, padding: 12, displayColors: false }
+          tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', titleFont: { size: 14 }, bodyFont: { size: 13 }, padding: 12 }
         },
         scales: {
           y: {
             beginAtZero: true,
             title: { display: true, text: 'Velocity RMS (mm/s)', font: { size: 13, weight: 'bold' }, color: '#666' },
-            grid: { color: 'rgba(0,0,0,0.05)' },
-            ticks: { font: { size: 12 }, color: '#666' }
+            grid: { color: 'rgba(0,0,0,0.05)' }
           },
           x: {
-            title: { display: true, text: 'เวลา', font: { size: 13, weight: 'bold' }, color: '#666' },
             grid: { display: false },
-            ticks: { maxRotation: 45, minRotation: 45, font: { size: 11 }, color: '#666' }
+            ticks: { maxRotation: 45, minRotation: 45 }
           }
         },
         animation: false 
       }
     });
 
-    // 📌 ฟังก์ชันจัดรูปแบบเวลาให้เป็นแบบที่คุณต้องการเป๊ะๆ
     function formatThaiDateString(isoString) {
-  const d = new Date(isoString);
-  const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-  const day = d.getDate();
-  const month = thaiMonths[d.getMonth()];
-  const year = d.getFullYear() + 543;
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  const seconds = String(d.getSeconds()).padStart(2, '0'); // 📌 เพิ่มบรรทัดนี้เข้ามา
-  return `${day} / ${month} / ${year} ณ เวลา ${hours}:${minutes}:${seconds}`;
-}
+      const d = new Date(isoString);
+      const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      const day = d.getDate();
+      const month = thaiMonths[d.getMonth()];
+      const year = d.getFullYear() + 543;
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const seconds = String(d.getSeconds()).padStart(2, '0');
+      return `${day} ${month} ${year} ${hours}:${minutes}:${seconds}`;
+    }
 
-    // 📌 2. ฟังก์ชันสร้างก้อนข้อมูลโชว์ในกล่อง Database (ให้คำนวณ Zone สดๆ)
-    // 📌 5. ปรับให้มีแถบสีเตือนภัยในกล่อง Database
     function createDbEntryHTML(data) {
-      const vrmsValue = parseFloat(data.vrms || 0);
-      const vrms = vrmsValue.toFixed(2);
-      const zone = data.zone || 'A'; 
+      const vx = parseFloat(data.x || 0).toFixed(2);
+      const vy = parseFloat(data.y || 0).toFixed(2);
+      const vz = parseFloat(data.z || 0).toFixed(2);
+      
+      const zone = data.zone || 'A';
       const timeStr = formatThaiDateString(data.timestamp);
       
-      // กำหนดสีตาม Zone
-      let zoneColor = '#4CAF50'; // สีเขียว (A)
-      if (zone === 'B') zoneColor = '#2196F3'; // สีฟ้า (B)
-      else if (zone === 'C') zoneColor = '#FFC107'; // สีเหลือง (C)
-      else if (zone === 'D') zoneColor = '#F44336'; // สีแดง (D)
-      
+      let zoneColor = zoneConfig[zone] ? zoneConfig[zone].color : '#10b981';
       return `<div class="db-entry" style="border-left: 5px solid ${zoneColor}; padding-left: 12px; background: #fff; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
         <strong style="color: ${zoneColor}; font-size: 1.1em;">Zone ${zone}</strong> <br>
-        ความสั่น: ${vrms} mm/s <br>
+        <span style="color:#2563eb; font-weight:bold;">X: ${vx}</span> |
+        <span style="color:#0f766e; font-weight:bold;">Y: ${vy}</span> | 
+        <span style="color:#ea580c; font-weight:bold;">Z: ${vz}</span> mm/s <br>
         <span style="color: #888; font-size: 0.85em;">เวลา: ${timeStr}</span>
       </div>`;
     }
@@ -314,96 +397,64 @@
     function connectWebSocket() {
       try {
         ws = new WebSocket(WS_URL);
-        
         ws.onopen = () => {
-          console.log('✅ เชื่อมต่อ WebSocket สำเร็จ');
           reconnectAttempts = 0;
           updateConnectionStatus(true);
         };
-        
         ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            
             if (message.type === 'init') {
               if (message.machineClasses) machineClasses = message.machineClasses;
               if (message.machineClass) currentMachineClass = message.machineClass;
               renderMachineClassButtons();
-              
               if (message.latest) updateDashboard(message.latest);
-              
-              // 📌 โหลดประวัติ Database ครั้งแรกตอนเปิดเว็บ
               if (message.history && message.history.length > 0) {
-                // วาดกราฟ (เรียงจากเก่าไปใหม่)
                 message.history.forEach(data => updateChart(data));
-                
-                // ใส่ข้อมูลลงกล่อง Database (สลับเอาของใหม่สุดไว้บนสุด)
                 const dbContainer = document.getElementById('dbContainer');
                 const reversedHistory = [...message.history].reverse(); 
                 dbContainer.innerHTML = reversedHistory.map(data => createDbEntryHTML(data)).join('');
               } else {
                 document.getElementById('dbContainer').innerHTML = '<div style="text-align:center; color:#999; padding: 20px;">ยังไม่มีข้อมูลในระบบ</div>';
               }
-
             } else if (message.type === 'update') {
               updateDashboard(message.data);
-              
-              // 📌 เมื่อมีข้อมูลใหม่เข้ามา ให้ดันใส่บนสุดของกล่อง Database
               const dbContainer = document.getElementById('dbContainer');
               if (dbContainer.innerHTML.includes('กำลังโหลดข้อมูล') || dbContainer.innerHTML.includes('ยังไม่มีข้อมูล')) {
                 dbContainer.innerHTML = '';
               }
-              const newEntry = createDbEntryHTML(message.data);
-              dbContainer.insertAdjacentHTML('afterbegin', newEntry);
-              
-              if (dbContainer.children.length > 100) {
-                dbContainer.removeChild(dbContainer.lastChild);
-              }
-            } else if (message.type === 'classUpdate') { // 📌 เปลี่ยนชื่อให้ตรงกับ Server
-              currentMachineClass = message.currentClass; // 📌 เปลี่ยนมารับตัวแปร currentClass
+              dbContainer.insertAdjacentHTML('afterbegin', createDbEntryHTML(message.data));
+              if (dbContainer.children.length > 100) dbContainer.removeChild(dbContainer.lastChild);
+            } else if (message.type === 'classUpdate') {
+              currentMachineClass = message.currentClass;
               renderMachineClassButtons();
             }
-          } catch (error) {
-            console.error('Error parsing message:', error);
-          }
+          } catch (error) { console.error('Error parsing message:', error); }
         };
         
-        ws.onerror = (error) => {
-          console.error('❌ WebSocket Error:', error);
-          updateConnectionStatus(false);
-        };
-        
+        ws.onerror = () => updateConnectionStatus(false);
         ws.onclose = () => {
-          console.log('🔄 WebSocket ปิดการเชื่อมต่อ');
           updateConnectionStatus(false);
-          
           if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             reconnectAttempts++;
             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
-            console.log(`พยายามเชื่อมต่อใหม่ในอีก ${delay/1000} วินาที (ครั้งที่ ${reconnectAttempts})`);
             setTimeout(connectWebSocket, delay);
           } else {
-            document.getElementById('connectionStatus').textContent = 'ไม่สามารถเชื่อมต่อได้ - โปรดรีเฟรชหน้าเว็บ';
+            document.getElementById('connectionStatus').textContent = 'ไม่สามารถเชื่อมต่อได้';
           }
         };
-      } catch (error) {
-        console.error('Error creating WebSocket:', error);
-        updateConnectionStatus(false);
-      }
+      } catch (error) { updateConnectionStatus(false); }
     }
     
     function updateConnectionStatus(isConnected) {
       const statusDot = document.getElementById('statusDot');
       const statusText = document.getElementById('connectionStatus');
-      
       if (isConnected) {
         statusDot.className = 'status-dot status-online';
         statusText.textContent = 'เชื่อมต่อสำเร็จ';
       } else {
         statusDot.className = 'status-dot status-offline';
-        statusText.textContent = reconnectAttempts > 0 ? 
-          `กำลังเชื่อมต่อใหม่... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})` : 
-          'ไม่ได้เชื่อมต่อ';
+        statusText.textContent = reconnectAttempts > 0 ? `กำลังเชื่อมต่อใหม่... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})` : 'ไม่ได้เชื่อมต่อ';
       }
     }
 
@@ -417,69 +468,81 @@
     }
     
     function updateDashboard(data) {
-      const vrms = parseFloat(data.vrms) || 0;
-      const zone = calculateCurrentZone(vrms);
-      
-      document.getElementById('vrmsValue').textContent = vrms.toFixed(2);
-      
-      const config = zoneConfig[zone] || zoneConfig['A'];
-      const zoneIndicator = document.getElementById('zoneIndicator');
-      const zoneDescription = document.getElementById('zoneDescription');
-      const zoneIcon = document.getElementById('zoneIcon');
-      
-      zoneIndicator.className = `zone-indicator zone-${zone}`;
-      zoneIndicator.textContent = `Zone ${zone}`;
-      zoneDescription.textContent = config.text;
-      zoneIcon.textContent = config.icon;
+      const vx = parseFloat(data.x) || 0;
+      const vy = parseFloat(data.y) || 0;
+      const vz = parseFloat(data.z) || 0;
+
+      document.getElementById('xValue').textContent = vx.toFixed(2);
+      document.getElementById('yValue').textContent = vy.toFixed(2);
+      document.getElementById('zValue').textContent = vz.toFixed(2);
+
+      const axes = [
+        { val: vx, indId: 'zoneIndicatorX', descId: 'zoneDescriptionX' },
+        { val: vy, indId: 'zoneIndicatorY', descId: 'zoneDescriptionY' },
+        { val: vz, indId: 'zoneIndicatorZ', descId: 'zoneDescriptionZ' }
+      ];
+
+      axes.forEach(axis => {
+        const zone = calculateCurrentZone(axis.val);
+        const config = zoneConfig[zone] || zoneConfig['A'];
+        const indicator = document.getElementById(axis.indId);
+        const description = document.getElementById(axis.descId);
+        
+        indicator.className = `zone-indicator zone-${zone}`;
+        indicator.textContent = `Zone ${zone}`;
+        description.textContent = config.text;
+      });
       
       const timestamp = new Date(data.timestamp);
-      document.getElementById('lastUpdate').textContent = 
-        timestamp.toLocaleString('th-TH', {
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          day: '2-digit', month: 'short', year: 'numeric'
-        });
+      document.getElementById('lastUpdate').textContent = timestamp.toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
       
       updateChart(data);
     }
     
     function updateChart(data) {
-      const vrms = parseFloat(data.vrms) || 0;
-      const time = new Date(data.timestamp).toLocaleTimeString('th-TH', {
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-      });
+      const vx = parseFloat(data.x) || 0;
+      const vy = parseFloat(data.y) || 0;
+      const vz = parseFloat(data.z) || 0;
+      const time = new Date(data.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       
-      dataPoints.push({ time, value: vrms });
-      if (dataPoints.length > MAX_POINTS) dataPoints.shift();
+      dataPoints.time.push(time);
+      dataPoints.x.push(vx);
+      dataPoints.y.push(vy);
+      dataPoints.z.push(vz);
       
-      chart.data.labels = dataPoints.map(d => d.time);
-      chart.data.datasets[0].data = dataPoints.map(d => d.value);
+      if (dataPoints.time.length > MAX_POINTS) {
+        dataPoints.time.shift(); dataPoints.x.shift(); dataPoints.y.shift(); dataPoints.z.shift();
+      }
+      
+      chart.data.labels = dataPoints.time;
+      chart.data.datasets[0].data = dataPoints.x;
+      chart.data.datasets[1].data = dataPoints.y;
+      chart.data.datasets[2].data = dataPoints.z;
       chart.update('none'); 
       
       updateStats();
     }
     
     function updateStats() {
-      if (dataPoints.length === 0) return;
+      if (dataPoints.time.length === 0) return;
+      const minX = Math.min(...dataPoints.x), maxX = Math.max(...dataPoints.x);
+      const minY = Math.min(...dataPoints.y), maxY = Math.max(...dataPoints.y);
+      const minZ = Math.min(...dataPoints.z), maxZ = Math.max(...dataPoints.z);
       
-      const values = dataPoints.map(d => d.value);
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      const avg = values.reduce((a, b) => a + b, 0) / values.length;
-      
-      document.getElementById('minValue').textContent = min.toFixed(2);
-      document.getElementById('maxValue').textContent = max.toFixed(2);
-      document.getElementById('avgValue').textContent = avg.toFixed(2);
-      document.getElementById('dataCount').textContent = dataPoints.length;
+      document.getElementById('minX').textContent = minX.toFixed(2);
+      document.getElementById('maxX').textContent = maxX.toFixed(2);
+      document.getElementById('minY').textContent = minY.toFixed(2);
+      document.getElementById('maxY').textContent = maxY.toFixed(2);
+      document.getElementById('minZ').textContent = minZ.toFixed(2);
+      document.getElementById('maxZ').textContent = maxZ.toFixed(2);
     }
     
     function renderMachineClassButtons() {
       const container = document.getElementById('classButtons');
       const infoContainer = document.getElementById('currentClassInfo');
-      
       if (!container || !machineClasses) return;
       
       container.innerHTML = '';
-      
       Object.keys(machineClasses).forEach(classKey => {
         const classData = machineClasses[classKey];
         const button = document.createElement('div');
@@ -497,7 +560,6 @@
             <div class="zone-range"><span>Zone D:</span><span>> ${zones.C.max} mm/s</span></div>
           </div>
         `;
-        
         container.appendChild(button);
       });
       
@@ -509,35 +571,42 @@
     
     function changeMachineClass(classKey) {
       if (classKey === currentMachineClass) return;
-      
       currentMachineClass = classKey;
       renderMachineClassButtons();
       
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'changeMachineClass', machineClass: classKey }));
-        console.log(`✅ เปลี่ยนเป็น ${machineClasses[classKey].name} (ส่งไปยัง Server)`);
       }
       
-      if (dataPoints.length > 0) {
-        const lastValue = dataPoints[dataPoints.length - 1].value;
-        const tempZone = calculateCurrentZone(lastValue);
-        const config = zoneConfig[tempZone] || zoneConfig['A'];
-        
-        document.getElementById('zoneIndicator').className = `zone-indicator zone-${tempZone}`;
-        document.getElementById('zoneIndicator').textContent = `Zone ${tempZone}`;
-        document.getElementById('zoneDescription').textContent = config.text;
-        document.getElementById('zoneIcon').textContent = config.icon;
+      if (dataPoints.time.length > 0) {
+        const lastX = dataPoints.x[dataPoints.x.length - 1];
+        const lastY = dataPoints.y[dataPoints.y.length - 1];
+        const lastZ = dataPoints.z[dataPoints.z.length - 1];
+
+        const axes = [
+          { val: lastX, indId: 'zoneIndicatorX', descId: 'zoneDescriptionX' },
+          { val: lastY, indId: 'zoneIndicatorY', descId: 'zoneDescriptionY' },
+          { val: lastZ, indId: 'zoneIndicatorZ', descId: 'zoneDescriptionZ' }
+        ];
+
+        axes.forEach(axis => {
+          const zone = calculateCurrentZone(axis.val);
+          const config = zoneConfig[zone] || zoneConfig['A'];
+          const indicator = document.getElementById(axis.indId);
+          const description = document.getElementById(axis.descId);
+          
+          indicator.className = `zone-indicator zone-${zone}`;
+          indicator.textContent = `Zone ${zone}`;
+          description.textContent = config.text;
+        });
       }
     }
 
     renderMachineClassButtons();
     connectWebSocket();
 
-  // 📌 ฟังก์ชันสำหรับดาวน์โหลดข้อมูลเป็นไฟล์ Excel (CSV)
     async function exportToCSV() {
       try {
-        // 1. ดึงข้อมูล 1,000 รายการล่าสุดจาก Database หลังบ้าน
-        // (ใช้ API ที่คุณสร้างรอไว้แล้วใน server.js)
         const response = await fetch('/api/history');
         const data = await response.json();
 
@@ -546,31 +615,26 @@
           return;
         }
 
-        // 2. สร้าง Header ของไฟล์ CSV (ใส่ \uFEFF เพื่อให้ Excel อ่านภาษาไทยได้ไม่เพี้ยน)
-        let csvContent = '\uFEFF'; 
-        csvContent += "วันที่และเวลา,ความสั่น (mm/s),Zone\n";
+        let csvContent = '\uFEFF';
+        csvContent += "วันที่และเวลา,แกน X (mm/s),แกน Y (mm/s),แกน Z (mm/s),Zone\n";
 
-        // 3. วนลูปนำข้อมูลมาต่อกันทีละบรรทัด
         data.forEach(row => {
-          // ใช้ฟังก์ชันแปลงเวลาที่คุณเขียนไว้แล้ว
           const timeStr = formatThaiDateString(row.timestamp);
-          const vrms = parseFloat(row.vrms || 0).toFixed(2);
+          const vx = parseFloat(row.x || 0).toFixed(2);
+          const vy = parseFloat(row.y || 0).toFixed(2);
+          const vz = parseFloat(row.z || 0).toFixed(2);
           const zone = row.zone || 'A';
           
-          // นำมาจัดรูปคั่นด้วยลูกน้ำ (,) สำหรับ CSV
-          csvContent += `"${timeStr}","${vrms}","Zone ${zone}"\n`;
+          csvContent += `"${timeStr}","${vx}","${vy}","${vz}","Zone ${zone}"\n`;
         });
-
-        // 4. สั่งให้เบราว์เซอร์ดาวน์โหลดไฟล์
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `Motor_Vibration_Report.csv`); // ชื่อไฟล์
+        link.setAttribute("download", `Motor_3Axis_Vibration_Report.csv`); 
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
       } catch (error) {
         console.error('Export Error:', error);
         alert('เกิดข้อผิดพลาดในการดาวน์โหลดข้อมูล');
