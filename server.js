@@ -16,13 +16,16 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ 100%!'))
   .catch(err => console.error('❌ Error เชื่อมต่อฐานข้อมูล:', err.message));
 
-// 📌 สร้างโครงสร้างฐานข้อมูล (รองรับ 3 แกน X, Y, Z)
+// 📌 1. อัปเดตโครงสร้างฐานข้อมูล (เพิ่ม zoneX, zoneY, zoneZ)
 const vibrationSchema = new mongoose.Schema({
   vrms: Number,
   x: Number,
   y: Number,
   z: Number,
-  zone: String,
+  zone: String,       // Zone ภาพรวม
+  zoneX: String,      // Zone ของแกน X
+  zoneY: String,      // Zone ของแกน Y
+  zoneZ: String,      // Zone ของแกน Z
   timestamp: { type: Date, default: Date.now }
 });
 
@@ -35,7 +38,23 @@ app.use(express.static(__dirname));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-let latestData = { vrms: 0, x: 0, y: 0, z: 0, zone: 'A', timestamp: new Date() };
+let latestData = { vrms: 0, x: 0, y: 0, z: 0, zone: 'A', zoneX: 'A', zoneY: 'A', zoneZ: 'A', timestamp: new Date() };
+
+// 📌 2. เพิ่มเกณฑ์การประเมิน Zone ไว้ฝั่ง Server (เพื่อให้คำนวณก่อนลง Database)
+const machineClassLimits = {
+  class1: { A: 2.8, B: 7.1, C: 11.2 },
+  class2: { A: 4.5, B: 11.2, C: 18.0 },
+  class3: { A: 7.1, B: 18.0, C: 28.0 },
+  class4: { A: 11.2, B: 28.0, C: 45.0 }
+};
+
+function calculateZoneServer(vrms, mClass) {
+  const limits = machineClassLimits[mClass] || machineClassLimits['class2'];
+  if (vrms <= limits.A) return 'A';
+  if (vrms <= limits.B) return 'B';
+  if (vrms <= limits.C) return 'C';
+  return 'D';
+}
 
 function extractClass(raw) {
     if (!raw) return null;
@@ -47,7 +66,6 @@ function extractClass(raw) {
     return null;
 }
 
-// 📌 ป้องกัน Render ตัดการเชื่อมต่อ WebSocket
 const interval = setInterval(() => {
   wss.clients.forEach((client) => {
     if (client.isAlive === false) return client.terminate();
@@ -65,21 +83,35 @@ wss.on('connection', async (ws) => {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
     ws.send(JSON.stringify({ type: 'init', latest: latestData, history: history.reverse(), machineClass: currentMachineClass }));
   } catch (err) {
-    console.error('❌ ไม่สามารถดึงประวัติช่วง Init ได้:', err.message); // เพิ่ม Error Log
+    console.error('❌ ไม่สามารถดึงประวัติช่วง Init ได้:', err.message);
   }
 
-  // 📌 จุดรับข้อมูลที่ถูกต้อง ต้องอยู่ในบล็อกนี้!
   ws.on('message', (message) => {
     try {
       const msg = JSON.parse(message);
 
       if (msg.type === 'sensor') {
+        const vx = parseFloat(msg.x) || 0;
+        const vy = parseFloat(msg.y) || 0;
+        const vz = parseFloat(msg.z) || 0;
+
+        // 📌 3. คำนวณ Zone แยกแต่ละแกนแบบ Real-time ตาม Class ปัจจุบัน
+        const zX = calculateZoneServer(vx, currentMachineClass);
+        const zY = calculateZoneServer(vy, currentMachineClass);
+        const zZ = calculateZoneServer(vz, currentMachineClass);
+        
+        const maxVrms = Math.max(vx, vy, vz);
+        const overallZone = calculateZoneServer(maxVrms, currentMachineClass);
+
         latestData = {
-          vrms: parseFloat(msg.vrms) || 0,
-          x: parseFloat(msg.x) || 0,
-          y: parseFloat(msg.y) || 0,
-          z: parseFloat(msg.z) || 0,
-          zone: msg.zone || 'A', // หมายเหตุ: zone ควรอัปเดตให้ตรงกับ Class
+          vrms: maxVrms, 
+          x: vx,
+          y: vy,
+          z: vz,
+          zone: overallZone,
+          zoneX: zX,
+          zoneY: zY,
+          zoneZ: zZ,
           timestamp: new Date()
         };
 
@@ -91,7 +123,7 @@ wss.on('connection', async (ws) => {
           }
         });
 
-        // เพิ่มการดักจับ Error หาก Save ไม่สำเร็จ
+        // บันทึกข้อมูลที่คำนวณ Zone ครบแล้วลง MongoDB
         new VibrationData(latestData).save().catch((err) => {
            console.error('❌ ไม่สามารถบันทึกข้อมูลลง DB ได้:', err.message);
         });
@@ -108,7 +140,7 @@ wss.on('connection', async (ws) => {
         }
       }
     } catch(e) {
-      console.error('❌ ได้รับข้อมูลที่ไม่ได้อยู่ในฟอร์แมต JSON:', message.toString()); // เพิ่ม Error Log
+      console.error('❌ ได้รับข้อมูลที่ไม่ได้อยู่ในฟอร์แมต JSON:', message.toString());
     }
   });
 
@@ -117,13 +149,12 @@ wss.on('connection', async (ws) => {
 
 wss.on('close', () => { clearInterval(interval); });
 
-// API ส่งข้อมูลประวัติให้หน้าเว็บ
 app.get('/api/history', async (req, res) => {
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(1000);
     res.json(history);
   } catch (err) {
-    console.error('❌ API History Error:', err.message); // เพิ่ม Error Log
+    console.error('❌ API History Error:', err.message);
     res.status(500).json({ error: 'Database error' });
   }
 });
