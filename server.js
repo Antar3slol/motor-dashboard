@@ -16,8 +16,7 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ 100%!'))
   .catch(err => console.error('❌ Error เชื่อมต่อฐานข้อมูล:', err.message));
 
-// 📌 1. เพิ่มแกน X, Y, Z ในตารางฐานข้อมูล
-// เพิ่มแกน x, y, z ลงใน Schema ฐานข้อมูล
+// 📌 สร้างโครงสร้างฐานข้อมูล (รองรับ 3 แกน X, Y, Z)
 const vibrationSchema = new mongoose.Schema({
   vrms: Number,
   x: Number,
@@ -26,17 +25,6 @@ const vibrationSchema = new mongoose.Schema({
   zone: String,
   timestamp: { type: Date, default: Date.now }
 });
-
-// ... และตรงจุดที่รับข้อมูลจากเซนเซอร์
-      if (msg.type === 'sensor') {
-        latestData = {
-          vrms: parseFloat(msg.vrms) || 0,
-          x: parseFloat(msg.x) || 0,
-          y: parseFloat(msg.y) || 0,
-          z: parseFloat(msg.z) || 0,
-          zone: msg.zone || 'A',
-          timestamp: new Date() 
-        };
 
 const VibrationData = mongoose.model('VibrationData', vibrationSchema);
 
@@ -59,37 +47,38 @@ function extractClass(raw) {
     return null;
 }
 
+// 📌 ป้องกัน Render ตัดการเชื่อมต่อ WebSocket
 const interval = setInterval(() => {
   wss.clients.forEach((client) => {
     if (client.isAlive === false) return client.terminate();
     client.isAlive = false;
-    client.ping(); 
+    client.ping();
   });
-}, 30000); 
+}, 30000);
 
 wss.on('connection', async (ws) => {
   console.log('✅ มีอุปกรณ์เชื่อมต่อ WebSocket เข้ามาแล้ว');
   ws.isAlive = true;
-  ws.on('pong', () => { ws.isAlive = true; }); 
+  ws.on('pong', () => { ws.isAlive = true; });
 
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
     ws.send(JSON.stringify({ type: 'init', latest: latestData, history: history.reverse(), machineClass: currentMachineClass }));
   } catch (err) {}
 
+  // 📌 จุดรับข้อมูลที่ถูกต้อง ต้องอยู่ในบล็อกนี้!
   ws.on('message', (message) => {
     try {
       const msg = JSON.parse(message);
 
       if (msg.type === 'sensor') {
-        // 📌 2. รับค่า X, Y, Z มาบันทึก
         latestData = {
           vrms: parseFloat(msg.vrms) || 0,
           x: parseFloat(msg.x) || 0,
           y: parseFloat(msg.y) || 0,
           z: parseFloat(msg.z) || 0,
           zone: msg.zone || 'A',
-          timestamp: new Date() 
+          timestamp: new Date()
         };
 
         ws.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
@@ -115,10 +104,13 @@ wss.on('connection', async (ws) => {
       }
     } catch(e) {}
   });
+
+  ws.on('close', () => console.log('❌ อุปกรณ์ยกเลิกการเชื่อมต่อ WebSocket'));
 });
 
 wss.on('close', () => { clearInterval(interval); });
 
+// API ส่งข้อมูลประวัติให้หน้าเว็บ
 app.get('/api/history', async (req, res) => {
   try {
     const history = await VibrationData.find().sort({ timestamp: -1 }).limit(1000);
@@ -129,4 +121,4 @@ app.get('/api/history', async (req, res) => {
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
-server.listen(PORT, '0.0.0.0', () => { console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`); })};
+server.listen(PORT, '0.0.0.0', () => { console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`); });
