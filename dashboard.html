@@ -169,7 +169,7 @@
     <div class="metrics-grid">
       <div class="metric-card" style="border-bottom: 4px solid #2563eb;">
         <div class="metric-label val-x">แนวนอน (แกน X)</div>
-        <div class="metric-value val-x" id="xValue">0.00</div>
+        <div class="metric-value val-x" id="xValue">0.0</div>
         <div class="metric-unit">mm/s (RMS)</div>
         <div class="zone-indicator zone-A" id="zoneIndicatorX">Zone A</div>
         <div class="zone-description" id="zoneDescriptionX">สภาพดีเยี่ยม</div>
@@ -177,7 +177,7 @@
      
       <div class="metric-card" style="border-bottom: 4px solid #0f766e;">
         <div class="metric-label val-y">แนวตั้ง (แกน Y)</div>
-        <div class="metric-value val-y" id="yValue">0.00</div>
+        <div class="metric-value val-y" id="yValue">0.0</div>
         <div class="metric-unit">mm/s (RMS)</div>
         <div class="zone-indicator zone-A" id="zoneIndicatorY">Zone A</div>
         <div class="zone-description" id="zoneDescriptionY">สภาพดีเยี่ยม</div>
@@ -185,7 +185,7 @@
       
       <div class="metric-card" style="border-bottom: 4px solid #ea580c;">
         <div class="metric-label val-z">แนวแกน (แกน Z)</div>
-        <div class="metric-value val-z" id="zValue">0.00</div>
+        <div class="metric-value val-z" id="zValue">0.0</div>
         <div class="metric-unit">mm/s (RMS)</div>
         <div class="zone-indicator zone-A" id="zoneIndicatorZ">Zone A</div>
         <div class="zone-description" id="zoneDescriptionZ">สภาพดีเยี่ยม</div>
@@ -205,22 +205,22 @@
         <div class="stat-box" style="border-top: 3px solid #2563eb;">
           <div class="stat-label val-x">สถิติแกน X</div>
           <div class="stat-flex">
-            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-x" id="minX">0.00</span></div>
-            <div><small>สูงสุด (Max)</small><span class="stat-value val-x" id="maxX">0.00</span></div>
+            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-x" id="minX">0.0</span></div>
+            <div><small>สูงสุด (Max)</small><span class="stat-value val-x" id="maxX">0.0</span></div>
           </div>
         </div>
         <div class="stat-box" style="border-top: 3px solid #0f766e;">
           <div class="stat-label val-y">สถิติแกน Y</div>
           <div class="stat-flex">
-            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-y" id="minY">0.00</span></div>
-            <div><small>สูงสุด (Max)</small><span class="stat-value val-y" id="maxY">0.00</span></div>
+            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-y" id="minY">0.0</span></div>
+            <div><small>สูงสุด (Max)</small><span class="stat-value val-y" id="maxY">0.0</span></div>
           </div>
         </div>
         <div class="stat-box" style="border-top: 3px solid #ea580c;">
           <div class="stat-label val-z">สถิติแกน Z</div>
           <div class="stat-flex">
-            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-z" id="minZ">0.00</span></div>
-            <div><small>สูงสุด (Max)</small><span class="stat-value val-z" id="maxZ">0.00</span></div>
+            <div><small>ต่ำสุด (Min)</small><span class="stat-value val-z" id="minZ">0.0</span></div>
+            <div><small>สูงสุด (Max)</small><span class="stat-value val-z" id="maxZ">0.0</span></div>
           </div>
         </div>
       </div>
@@ -394,9 +394,9 @@
       const timeStr = formatThaiDateString(data.timestamp);
       
       return `<div class="db-entry" style="border-left: 5px solid ${borderColor}; padding-left: 12px; background: #fff; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <span style="color:#2563eb; font-weight:bold;">X: ${vx.toFixed(2)} (Zone ${zoneX})</span> | 
-        <span style="color:#0f766e; font-weight:bold;">Y: ${vy.toFixed(2)} (Zone ${zoneY})</span> | 
-        <span style="color:#ea580c; font-weight:bold;">Z: ${vz.toFixed(2)} (Zone ${zoneZ})</span> <span style="font-weight:bold;">mm/s</span> <br>
+        <span style="color:#2563eb; font-weight:bold;">X: ${vx.toFixed(1)} (Zone ${zoneX})</span> | 
+        <span style="color:#0f766e; font-weight:bold;">Y: ${vy.toFixed(1)} (Zone ${zoneY})</span> | 
+        <span style="color:#ea580c; font-weight:bold;">Z: ${vz.toFixed(1)} (Zone ${zoneZ})</span> <span style="font-weight:bold;">mm/s</span> <br>
         <span style="color: #888; font-size: 0.85em;">เวลา: ${timeStr}</span>
       </div>`;
     }
@@ -479,9 +479,9 @@
       const vy = parseFloat(data.y) || 0;
       const vz = parseFloat(data.z) || 0;
 
-      document.getElementById('xValue').textContent = vx.toFixed(2);
-      document.getElementById('yValue').textContent = vy.toFixed(2);
-      document.getElementById('zValue').textContent = vz.toFixed(2);
+      document.getElementById('xValue').textContent = vx.toFixed(1);
+      document.getElementById('yValue').textContent = vy.toFixed(1);
+      document.getElementById('zValue').textContent = vz.toFixed(1);
 
       const axes = [
         { val: vx, indId: 'zoneIndicatorX', descId: 'zoneDescriptionX' },
@@ -536,12 +536,12 @@
       const minY = Math.min(...dataPoints.y), maxY = Math.max(...dataPoints.y);
       const minZ = Math.min(...dataPoints.z), maxZ = Math.max(...dataPoints.z);
       
-      document.getElementById('minX').textContent = minX.toFixed(2);
-      document.getElementById('maxX').textContent = maxX.toFixed(2);
-      document.getElementById('minY').textContent = minY.toFixed(2);
-      document.getElementById('maxY').textContent = maxY.toFixed(2);
-      document.getElementById('minZ').textContent = minZ.toFixed(2);
-      document.getElementById('maxZ').textContent = maxZ.toFixed(2);
+      document.getElementById('minX').textContent = minX.toFixed(1);
+      document.getElementById('maxX').textContent = maxX.toFixed(1);
+      document.getElementById('minY').textContent = minY.toFixed(1);
+      document.getElementById('maxY').textContent = maxY.toFixed(1);
+      document.getElementById('minZ').textContent = minZ.toFixed(1);
+      document.getElementById('maxZ').textContent = maxZ.toFixed(1);
     }
     
     function renderMachineClassButtons() {
@@ -638,7 +638,7 @@
           const zoneZ = calculateCurrentZone(vz);
           
           // 4. นำข้อมูลจัดเรียงลงแต่ละคอลัมน์
-          csvContent += `"${timeStr}","${vx.toFixed(2)}","Zone ${zoneX}","${vy.toFixed(2)}","Zone ${zoneY}","${vz.toFixed(2)}","Zone ${zoneZ}"\n`;
+          csvContent += `"${timeStr}","${vx.toFixed(1)}","Zone ${zoneX}","${vy.toFixed(1)}","Zone ${zoneY}","${vz.toFixed(1)}","Zone ${zoneZ}"\n`;
         });
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

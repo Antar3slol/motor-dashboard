@@ -150,9 +150,9 @@ wss.on('connection', async (ws) => {
 
         // 📌 4. เตรียมข้อมูลสำหรับบันทึกลง Database (เก็บตาม Format ที่คุณต้องการเป๊ะๆ)
         const dbData = {
-          x: `${vx.toFixed(2)} mm/s : zone : "${zX}"`,
-          y: `${vy.toFixed(2)} mm/s : zone : "${zY}"`,
-          z: `${vz.toFixed(2)} mm/s : zone : "${zZ}"`,
+          x: `${vx.toFixed(1)} mm/s : zone : "${zX}"`,
+          y: `${vy.toFixed(1)} mm/s : zone : "${zY}"`,
+          z: `${vz.toFixed(1)} mm/s : zone : "${zZ}"`,
           timestamp: thaiDateStr, // จะได้ "4 มี.ค. 2569 15:06:15"
           
           // ซ่อนค่าตัวเลขดิบไว้เป็น Backup
