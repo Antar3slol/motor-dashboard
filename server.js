@@ -39,7 +39,7 @@ const VibrationData = mongoose.model('VibrationData', vibrationSchema);
 app.use(cors());
 app.use(express.json());
 
-// [แก้ไข Bug 3] บล็อกไฟล์สำคัญก่อน express.static เพื่อป้องกัน credentials หลุด
+// บล็อกไฟล์สำคัญก่อน express.static เพื่อป้องกัน credentials หลุด
 const BLOCKED_PATHS = ['/server.js', '/.env', '/package.json', '/package-lock.json', '/yarn.lock'];
 app.use((req, res, next) => {
   const p = req.path.toLowerCase();
@@ -70,7 +70,7 @@ setInterval(() => {
     .catch(err => console.error('❌ บันทึก DB ไม่สำเร็จ:', err.message));
 
   pendingDbData = null; // เคลียร์ค่าหลังจากสั่งบันทึก
-}, DB_SAVE_INTERVAL_MS); // [แก้ไข] ใช้ Interval 1000ms พอดีเลย ไม่ต้องเช็คซ้ำซ้อน
+}, DB_SAVE_INTERVAL_MS);
 
 // ─── ISO 10816 Zone Calculator ──────────────────────────────────
 const machineClassLimits = {
@@ -173,7 +173,7 @@ wss.on('connection', (ws) => {
         }
       });
 
-      // ── [แก้ไข] การกรองเพื่อเก็บบันทึกข้อมูลลง DB ──────────────────
+      // การกรองเพื่อเก็บบันทึกข้อมูลลง DB
       if (!pendingDbData) {
         pendingDbData = {
           x: vx, y: vy, z: vz,
@@ -181,8 +181,7 @@ wss.on('connection', (ws) => {
           timestamp: now
         };
       } else {
-        // [แก้ไข] เปรียบเทียบความรุนแรงรวม (Vector Magnitude)
-        // แทนการแยกเอาแกน X, Y, Z จากคนละเวลามาผสมกัน
+        // เปรียบเทียบความรุนแรงรวม (Vector Magnitude)
         const currentMagnitude = Math.sqrt(vx*vx + vy*vy + vz*vz);
         const pendingMagnitude = Math.sqrt(pendingDbData.x**2 + pendingDbData.y**2 + pendingDbData.z**2);
 
@@ -201,14 +200,36 @@ wss.on('connection', (ws) => {
     const newClass = extractClass(
       msg.machineClass || msg.className || msg.class || msg.value || msg.data
     );
+    
     if (newClass && newClass !== currentMachineClass) {
       currentMachineClass = newClass;
       console.log(`[CLASS] เปลี่ยนเป็น ${currentMachineClass}`);
+      
       const classPayload = JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass });
       
+      // แจ้งทุกคนว่าเปลี่ยน Class แล้ว
       wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) client.send(classPayload);
       });
+
+      // 🌟 [ส่วนที่แก้ไข] คำนวณ Zone ของข้อมูลล่าสุดใหม่ แล้วส่งกลับไปที่หน้าเว็บทันที
+      if (latestData) {
+        latestData.zoneX = calculateZone(latestData.x, currentMachineClass);
+        latestData.zoneY = calculateZone(latestData.y, currentMachineClass);
+        latestData.zoneZ = calculateZone(latestData.z, currentMachineClass);
+
+        const updatePayload = JSON.stringify({
+          type: 'update',
+          data: latestData,
+          currentClass: currentMachineClass
+        });
+
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN && !client.isSensor) {
+            client.send(updatePayload);
+          }
+        });
+      }
     }
   });
 
