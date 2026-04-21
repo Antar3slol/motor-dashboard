@@ -1,216 +1,264 @@
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const WebSocket = require('ws');
-const http = require('http');
-const path = require('path');
-const mongoose = require('mongoose');
+const express    = require('express');
+const cors       = require('cors');
+const WebSocket  = require('ws');
+const http       = require('http');
+const path       = require('path');
+const mongoose   = require('mongoose');
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
-let currentMachineClass = 'class2';
+// ─── MongoDB ────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
 
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ 100%!'))
-  .catch(err => console.error('❌ Error เชื่อมต่อฐานข้อมูล:', err.message));
+if (!MONGODB_URI) {
+  console.error('❌ กรุณาตั้งค่า MONGODB_URI ใน .env ก่อนรัน server');
+  process.exit(1);
+}
 
-// 📌 1. ปรับโครงสร้าง Database ให้รองรับรูปแบบข้อความ (String) ที่ต้องการ
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ เชื่อมต่อ MongoDB สำเร็จ!'))
+  .catch(err => console.error('❌ MongoDB Error:', err.message));
+
+// Schema สำหรับเก็บข้อมูล
 const vibrationSchema = new mongoose.Schema({
-  x: String,
-  y: String,
-  z: String,
-  timestamp: String, // เก็บเวลาเป็นข้อความแบบไทย
-  
-  // ⚠️ ซ่อนค่าตัวเลขดิบไว้ เพื่อให้กราฟ Chart.js บนเว็บดึงไปวาดต่อได้โดยไม่พัง
-  raw_x: Number,
-  raw_y: Number,
-  raw_z: Number,
-  raw_zoneX: String,
-  raw_zoneY: String,
-  raw_zoneZ: String,
-  raw_timestamp: Date
+  x:         Number,
+  y:         Number,
+  z:         Number,
+  zoneX:     String,
+  zoneY:     String,
+  zoneZ:     String,
+  timestamp: Date
 });
 
+vibrationSchema.index({ timestamp: -1 });
 const VibrationData = mongoose.model('VibrationData', vibrationSchema);
 
+// ─── Middleware ─────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
+
+// [แก้ไข Bug 3] บล็อกไฟล์สำคัญก่อน express.static เพื่อป้องกัน credentials หลุด
+const BLOCKED_PATHS = ['/server.js', '/.env', '/package.json', '/package-lock.json', '/yarn.lock'];
+app.use((req, res, next) => {
+  const p = req.path.toLowerCase();
+  if (BLOCKED_PATHS.includes(p) || p.startsWith('/node_modules')) {
+    return res.status(403).send('Forbidden');
+  }
+  next();
+});
+
 app.use(express.static(__dirname));
 
+// ─── HTTP + WebSocket Server ────────────────────────────────────
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss    = new WebSocket.Server({ server });
 
+// ─── State ──────────────────────────────────────────────────────
+let currentMachineClass = 'class1';
 let latestData = { x: 0, y: 0, z: 0, zoneX: 'A', zoneY: 'A', zoneZ: 'A', timestamp: new Date() };
 
-// ฟังก์ชันคำนวณ Zone จาก Server
+// ─── DB Write Rate Limiter (บันทึก Peak Data ทุกๆ 1 วินาที) ─────
+const DB_SAVE_INTERVAL_MS = 1000;
+let   pendingDbData       = null;
+
+setInterval(() => {
+  if (!pendingDbData) return;
+
+  new VibrationData(pendingDbData).save()
+    .catch(err => console.error('❌ บันทึก DB ไม่สำเร็จ:', err.message));
+
+  pendingDbData = null; // เคลียร์ค่าหลังจากสั่งบันทึก
+}, DB_SAVE_INTERVAL_MS); // [แก้ไข] ใช้ Interval 1000ms พอดีเลย ไม่ต้องเช็คซ้ำซ้อน
+
+// ─── ISO 10816 Zone Calculator ──────────────────────────────────
 const machineClassLimits = {
-  class1: { A: 2.8, B: 7.1, C: 11.2 },
-  class2: { A: 4.5, B: 11.2, C: 18.0 },
-  class3: { A: 7.1, B: 18.0, C: 28.0 },
+  class1: { A: 2.8,  B: 7.1,  C: 11.2 },
+  class2: { A: 4.5,  B: 11.2, C: 18.0 },
+  class3: { A: 7.1,  B: 18.0, C: 28.0 },
   class4: { A: 11.2, B: 28.0, C: 45.0 }
 };
 
-function calculateZoneServer(vrms, mClass) {
-  const limits = machineClassLimits[mClass] || machineClassLimits['class2'];
-  if (vrms <= limits.A) return 'A';
-  if (vrms <= limits.B) return 'B';
-  if (vrms <= limits.C) return 'C';
+function calculateZone(vrms, mClass) {
+  const lim = machineClassLimits[mClass] || machineClassLimits['class2'];
+  if (vrms <= lim.A) return 'A';
+  if (vrms <= lim.B) return 'B';
+  if (vrms <= lim.C) return 'C';
   return 'D';
 }
 
 function extractClass(raw) {
-    if (!raw) return null;
-    let str = String(raw).toLowerCase().replace(/\s+/g, '');
-    if (str.includes('1')) return 'class1';
-    if (str.includes('2')) return 'class2';
-    if (str.includes('3')) return 'class3';
-    if (str.includes('4')) return 'class4';
-    return null;
+  if (!raw) return null;
+  const s = String(raw).toLowerCase().replace(/\s+/g, '');
+  const match = s.match(/class([1-4])$/);
+  if (match) return `class${match[1]}`;
+  return null;
 }
 
-const interval = setInterval(() => {
-  wss.clients.forEach((client) => {
+// ─── WebSocket: Heartbeat ────────────────────────────────────────
+const PING_INTERVAL_MS = 30_000;
+const heartbeat = setInterval(() => {
+  wss.clients.forEach(client => {
     if (client.isAlive === false) return client.terminate();
     client.isAlive = false;
     client.ping();
   });
-}, 30000);
+}, PING_INTERVAL_MS);
 
-wss.on('connection', async (ws) => {
-  console.log('✅ มีอุปกรณ์เชื่อมต่อ WebSocket เข้ามาแล้ว');
-  ws.isAlive = true;
+wss.on('close', () => clearInterval(heartbeat));
+
+// ─── WebSocket: Connection Handler ──────────────────────────────
+wss.on('connection', (ws) => {
+  console.log('✅ อุปกรณ์/ผู้ใช้ เชื่อมต่อ WebSocket');
+  ws.isAlive  = true;
+  ws.isSensor = false;
+
   ws.on('pong', () => { ws.isAlive = true; });
 
-  try {
-    // 📌 ใช้การเรียงตาม ID (_id) แทน timestamp เพราะ timestamp ตอนนี้เป็น String แล้ว
-    const history = await VibrationData.find().sort({ _id: -1 }).limit(100);
-    
-    // ดึงค่า raw กลับมาแปลงให้ Dashboard ใช้วาดกราฟ
-    const formatForDashboard = history.map(doc => ({
-      x: doc.raw_x !== undefined ? doc.raw_x : parseFloat(doc.x) || 0,
-      y: doc.raw_y !== undefined ? doc.raw_y : parseFloat(doc.y) || 0,
-      z: doc.raw_z !== undefined ? doc.raw_z : parseFloat(doc.z) || 0,
-      zoneX: doc.raw_zoneX || 'A',
-      zoneY: doc.raw_zoneY || 'A',
-      zoneZ: doc.raw_zoneZ || 'A',
-      timestamp: doc.raw_timestamp || new Date()
-    }));
+  // ส่ง Class ปัจจุบันให้ทันทีที่เชื่อมต่อ
+  ws.send(JSON.stringify({
+    type: 'classUpdate',
+    currentClass: currentMachineClass
+  }));
 
-    ws.send(JSON.stringify({ type: 'init', latest: latestData, history: formatForDashboard.reverse(), machineClass: currentMachineClass }));
-  } catch (err) {
-    console.error('❌ ไม่สามารถดึงประวัติช่วง Init ได้:', err.message);
-  }
+  // ── Message Handler ───────────────────────────────────────────
+  ws.on('message', async (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw); }
+    catch { return console.warn('⚠️ JSON ไม่ถูกต้อง:', String(raw).slice(0, 80)); }
 
-  ws.on('message', (message) => {
-    try {
-      const msg = JSON.parse(message);
+    // Dashboard ขอข้อมูล History สำหรับกราฟตอนโหลดหน้าแรก
+    if (msg.type === 'dashboard_connect') {
+      try {
+        const docs    = await VibrationData.find().sort({ timestamp: -1 }).limit(100);
+        const history = docs.reverse(); 
+        ws.send(JSON.stringify({
+          type:         'init',
+          latest:       latestData,
+          history:      history,
+          machineClass: currentMachineClass
+        }));
+      } catch (err) {
+        console.error('❌ ดึง history ไม่ได้:', err.message);
+      }
+      return;
+    }
 
-      if (msg.type === 'sensor') {
-        const vx = parseFloat(msg.x) || 0;
-        const vy = parseFloat(msg.y) || 0;
-        const vz = parseFloat(msg.z) || 0;
+    // ── Sensor Data (รับข้อมูล Real-time 10Hz จาก ESP32) ────────
+    if (msg.type === 'sensor') {
+      ws.isSensor = true;
 
-        const zX = calculateZoneServer(vx, currentMachineClass);
-        const zY = calculateZoneServer(vy, currentMachineClass);
-        const zZ = calculateZoneServer(vz, currentMachineClass);
+      const vx = isFinite(parseFloat(msg.x)) ? parseFloat(msg.x) : 0;
+      const vy = isFinite(parseFloat(msg.y)) ? parseFloat(msg.y) : 0;
+      const vz = isFinite(parseFloat(msg.z)) ? parseFloat(msg.z) : 0;
 
-        const now = new Date();
-        
-        // 📌 2. สร้างเวลาแบบไทย (UTC+7) 
-        const thaiDateStr = now.toLocaleString('th-TH', { 
-          timeZone: 'Asia/Bangkok',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        });
+      const calcZX = calculateZone(vx, currentMachineClass);
+      const calcZY = calculateZone(vy, currentMachineClass);
+      const calcZZ = calculateZone(vz, currentMachineClass);
+      const now = new Date();
 
-        // 📌 3. เตรียมข้อมูลสำหรับส่งให้ Dashboard (ส่งตัวเลขไป กราฟจะได้วาดได้)
-        latestData = {
-          x: vx,
-          y: vy,
-          z: vz,
-          zoneX: zX,
-          zoneY: zY,
-          zoneZ: zZ,
+      latestData = { x: vx, y: vy, z: vz, zoneX: calcZX, zoneY: calcZY, zoneZ: calcZZ, timestamp: now };
+
+      // Broadcast อัปเดตไปยัง Dashboard ทุกจอที่กำลังเปิดอยู่
+      const payload = JSON.stringify({
+        type:         'update',
+        data:         latestData,
+        currentClass: currentMachineClass
+      });
+
+      wss.clients.forEach(client => {
+        if (client !== ws && !client.isSensor && client.readyState === WebSocket.OPEN) {
+          client.send(payload);
+        }
+      });
+
+      // ── [แก้ไข] การกรองเพื่อเก็บบันทึกข้อมูลลง DB ──────────────────
+      if (!pendingDbData) {
+        pendingDbData = {
+          x: vx, y: vy, z: vz,
+          zoneX: calcZX, zoneY: calcZY, zoneZ: calcZZ,
           timestamp: now
         };
+      } else {
+        // [แก้ไข] เปรียบเทียบความรุนแรงรวม (Vector Magnitude)
+        // แทนการแยกเอาแกน X, Y, Z จากคนละเวลามาผสมกัน
+        const currentMagnitude = Math.sqrt(vx*vx + vy*vy + vz*vz);
+        const pendingMagnitude = Math.sqrt(pendingDbData.x**2 + pendingDbData.y**2 + pendingDbData.z**2);
 
-        ws.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
-
-        wss.clients.forEach((client) => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'update', data: latestData, currentClass: currentMachineClass }));
-          }
-        });
-
-        // 📌 4. เตรียมข้อมูลสำหรับบันทึกลง Database (เก็บตาม Format ที่คุณต้องการเป๊ะๆ)
-        const dbData = {
-          x: `${vx.toFixed(2)} mm/s : zone : "${zX}"`,
-          y: `${vy.toFixed(2)} mm/s : zone : "${zY}"`,
-          z: `${vz.toFixed(2)} mm/s : zone : "${zZ}"`,
-          timestamp: thaiDateStr, // จะได้ "4 มี.ค. 2569 15:06:15"
-          
-          // ซ่อนค่าตัวเลขดิบไว้เป็น Backup
-          raw_x: vx,
-          raw_y: vy,
-          raw_z: vz,
-          raw_zoneX: zX,
-          raw_zoneY: zY,
-          raw_zoneZ: zZ,
-          raw_timestamp: now
-        };
-
-        new VibrationData(dbData).save().catch((err) => {
-           console.error('❌ ไม่สามารถบันทึกข้อมูลลง DB ได้:', err.message);
-        });
-      }
-      else {
-        let parsedClass = extractClass(msg.machineClass || msg.className || msg.class || msg.value || msg.data);
-        if (parsedClass) {
-          currentMachineClass = parsedClass;
-          wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass }));
-            }
-          });
+        if (currentMagnitude > pendingMagnitude) {
+          pendingDbData = {
+            x: vx, y: vy, z: vz,
+            zoneX: calcZX, zoneY: calcZY, zoneZ: calcZZ,
+            timestamp: now
+          };
         }
       }
-    } catch(e) {
-      console.error('❌ ได้รับข้อมูลที่ไม่ได้อยู่ในฟอร์แมต JSON:', message.toString());
+      return;
+    }
+
+    // ── Machine Class Change (จาก Dashboard สั่งเปลี่ยนสเปก) ──────
+    const newClass = extractClass(
+      msg.machineClass || msg.className || msg.class || msg.value || msg.data
+    );
+    if (newClass && newClass !== currentMachineClass) {
+      currentMachineClass = newClass;
+      console.log(`[CLASS] เปลี่ยนเป็น ${currentMachineClass}`);
+      const classPayload = JSON.stringify({ type: 'classUpdate', currentClass: currentMachineClass });
+      
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) client.send(classPayload);
+      });
     }
   });
 
-  ws.on('close', () => console.log('❌ อุปกรณ์ยกเลิกการเชื่อมต่อ WebSocket'));
+  ws.on('close', () => console.log('❌ อุปกรณ์/ผู้ใช้ ยกเลิกการเชื่อมต่อ'));
+  ws.on('error', err => console.error('❌ WebSocket Error:', err.message));
 });
 
-wss.on('close', () => { clearInterval(interval); });
+// ─── REST API ────────────────────────────────────────────────────
 
+// GET /api/history — ดึงข้อมูลย้อนหลัง
 app.get('/api/history', async (req, res) => {
   try {
-    const history = await VibrationData.find().sort({ _id: -1 }).limit(1000);
-    
-    // คืนค่า raw กลับไปให้ตอนกดโหลด Excel หรือวาดกราฟใช้งานได้ปกติ
-    const formatForDashboard = history.map(doc => ({
-      x: doc.raw_x !== undefined ? doc.raw_x : parseFloat(doc.x) || 0,
-      y: doc.raw_y !== undefined ? doc.raw_y : parseFloat(doc.y) || 0,
-      z: doc.raw_z !== undefined ? doc.raw_z : parseFloat(doc.z) || 0,
-      zoneX: doc.raw_zoneX || 'A',
-      zoneY: doc.raw_zoneY || 'A',
-      zoneZ: doc.raw_zoneZ || 'A',
-      timestamp: doc.raw_timestamp || new Date()
-    }));
-
-    res.json(formatForDashboard);
+    const limit = Math.min(parseInt(req.query.limit) || 1000, 5000);
+    const docs  = await VibrationData.find().sort({ timestamp: -1 }).limit(limit);
+    res.json(docs);
   } catch (err) {
-    console.error('❌ API History Error:', err.message);
+    console.error('❌ API /history Error:', err.message);
     res.status(500).json({ error: 'Database error' });
   }
 });
 
+// GET /api/health — ตรวจสอบสถานะ server
+app.get('/api/health', (req, res) => {
+  res.json({
+    status:       'ok',
+    uptime:       Math.floor(process.uptime()),
+    db:           mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    wsClients:    wss.clients.size,
+    currentClass: currentMachineClass
+  });
+});
+
+// GET / — Dashboard
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
-server.listen(PORT, '0.0.0.0', () => { console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`); });
+
+// ─── Start ──────────────────────────────────────────────────────
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server ทำงานที่พอร์ต: ${PORT}`);
+});
+
+// ─── Graceful Shutdown ───────────────────────────────────────────
+function shutdown(signal) {
+  console.log(`\n[${signal}] ปิด server อย่างปลอดภัย...`);
+  server.close(() => {
+    mongoose.connection.close(false, () => {
+      console.log('✅ ปิด MongoDB และ HTTP server แล้ว');
+      process.exit(0);
+    });
+  });
+  setTimeout(() => { console.error('⚠️ Force exit'); process.exit(1); }, 10000);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
