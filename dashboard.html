@@ -411,7 +411,7 @@
   // ─── CONFIG ────────────────────────────────────────────────
   const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const WS_URL = `${WS_PROTOCOL}//${window.location.host}`;
-  // [แก้ไข] เปลี่ยนเป็น 200 จุด เพื่อให้ดูข้อมูลย้อนหลังได้ประมาณ 40 วินาที (ที่ 5Hz)
+  // เปลี่ยนเป็น 200 จุด เพื่อให้ดูข้อมูลย้อนหลังได้ประมาณ 40 วินาที (ที่ 5Hz)
   const MAX_POINTS = 200;
   const MAX_DB_ROWS = 100;
   const MAX_RECONNECT = 5;
@@ -526,7 +526,7 @@
   }
 
   // ─── DASHBOARD UPDATE ──────────────────────────────────────
-  // [แก้ไข Bug 4] แยก updateDashboard (พร้อม chart) และ updateDashboardUI (ไม่เพิ่ม chart)
+  // แยก updateDashboard (พร้อม chart) และ updateDashboardUI (ไม่เพิ่ม chart)
   // เพื่อให้ init ไม่เพิ่ม latest ผิดลำดับใน chart
   function updateDashboardUI(data) {
     const vx = parseFloat(data.x) || 0;
@@ -541,7 +541,7 @@
     updateGauge('gaugeY', vy);
     updateGauge('gaugeZ', vz);
 
-    // [แก้ไข Bug 4] ใช้ zone จาก server ถ้ามี ไม่งั้นค่อยคำนวณ client-side
+    // ใช้ zone จาก server ถ้ามี ไม่งั้นค่อยคำนวณ client-side
     const axes = [
       { val:vx, zone: data.zoneX || calculateZone(vx), indId:'zoneIndicatorX', descId:'zoneDescriptionX' },
       { val:vy, zone: data.zoneY || calculateZone(vy), indId:'zoneIndicatorY', descId:'zoneDescriptionY' },
@@ -672,15 +672,21 @@
     if (key === currentMachineClass) return;
     currentMachineClass = key;
     renderMachineClassButtons();
-    if (ws && ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type:'changeMachineClass', machineClass:key }));
     
-    if (dataPoints.time.length) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type:'changeMachineClass', machineClass:key }));
+    }
+    
+    if (dataPoints.time.length > 0) {
+      const lastIndex = dataPoints.time.length - 1;
       const last = {
-        x: dataPoints.x.at(-1), y: dataPoints.y.at(-1), z: dataPoints.z.at(-1),
+        x: dataPoints.x[lastIndex],
+        y: dataPoints.y[lastIndex],
+        z: dataPoints.z[lastIndex],
         timestamp: new Date()
       };
-      updateDashboard(last);
+      // เรียกใช้แค่ UI เพื่อป้องกันการวาดจุดไข่ปลาซ้ำลงในกราฟ
+      updateDashboardUI(last);
     }
   }
 
@@ -710,7 +716,7 @@
             chart.data.datasets.forEach(ds => ds.data = []);
             chart.update('none');
 
-            // [แก้ไข Bug 5] โหลด history ลงกราฟก่อน เพื่อให้ลำดับเวลาถูกต้อง
+            // โหลด history ลงกราฟก่อน เพื่อให้ลำดับเวลาถูกต้อง
             if (msg.history?.length) {
               msg.history.forEach(d => updateChart(d));
               const tbody = document.getElementById('dbTableBody');
