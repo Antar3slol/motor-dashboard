@@ -268,7 +268,7 @@
   </div>
 
   <div class="section-card">
-    <div class="section-title">เลือกสเปคเครื่องจักร (ISO 10816-3)</div>
+    <div class="section-title">เลือกกลุ่มเครื่องจักร (ISO 10816-3 Critical Machines)</div>
     <div class="class-buttons" id="classButtons"></div>
     <div class="current-class-info" id="currentClassInfo"></div>
   </div>
@@ -425,15 +425,16 @@
   let dataPoints = { time: [], x: [], y: [], z: [] };
 
   let currentMachineClass = 'class1';
-  let machineClasses = {
-    class1: { name:'Class I',  description:'เครื่องจักรขนาดเล็ก (< 15 kW)',
-      zones:{ A:{max:2.8}, B:{max:7.1},  C:{max:11.2}, D:{max:Infinity} } },
-    class2: { name:'Class II', description:'เครื่องจักรขนาดกลาง (15–75 kW)',
-      zones:{ A:{max:4.5}, B:{max:11.2}, C:{max:18.0}, D:{max:Infinity} } },
-    class3: { name:'Class III',description:'เครื่องจักรขนาดใหญ่ (> 75 kW, Rigid)',
-      zones:{ A:{max:7.1}, B:{max:18.0}, C:{max:28.0}, D:{max:Infinity} } },
-    class4: { name:'Class IV', description:'เครื่องจักรขนาดใหญ่ (> 75 kW, Flexible)',
-      zones:{ A:{max:11.2},B:{max:28.0}, C:{max:45.0}, D:{max:Infinity} } }
+  // ISO 10816-3 Critical Machines: motors >15 kW, 120–15,000 RPM
+let machineClasses = {
+    class1: { name:'Group 2 & 4 (Flexible)', description:'ขนาดกลาง 15–300 kW, ฐานยืดหยุ่น',
+      zones:{ A:{max:1.4}, B:{max:2.8}, C:{max:4.5}, D:{max:Infinity} } },
+    class2: { name:'Group 2 & 4 (Rigid)', description:'ขนาดกลาง 15–300 kW, ฐานแข็ง',
+      zones:{ A:{max:2.3}, B:{max:4.5}, C:{max:7.1}, D:{max:Infinity} } },
+    class3: { name:'Group 1 & 3 (Flexible)', description:'ขนาดใหญ่ > 300 kW, ฐานยืดหยุ่น',
+      zones:{ A:{max:2.3}, B:{max:4.5}, C:{max:7.1}, D:{max:Infinity} } },
+    class4: { name:'Group 1 & 3 (Rigid)', description:'ขนาดใหญ่ > 300 kW, ฐานแข็ง',
+      zones:{ A:{max:3.5}, B:{max:7.1}, C:{max:11.0}, D:{max:Infinity} } }
   };
 
   const zoneConfig = {

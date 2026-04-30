@@ -72,12 +72,12 @@ setInterval(() => {
   pendingDbData = null; // เคลียร์ค่าหลังจากสั่งบันทึก
 }, DB_SAVE_INTERVAL_MS);
 
-// ─── ISO 10816 Zone Calculator ──────────────────────────────────
+// ─── ISO 10816-3 Zone Calculator (Critical Machines >15kW, 120–15000 RPM) ──────
 const machineClassLimits = {
-  class1: { A: 2.8,  B: 7.1,  C: 11.2 },
-  class2: { A: 4.5,  B: 11.2, C: 18.0 },
-  class3: { A: 7.1,  B: 18.0, C: 28.0 },
-  class4: { A: 11.2, B: 28.0, C: 45.0 }
+  class1: { A: 1.4, B: 2.8, C: 4.5 },   // Group 2 & 4 (Flexible / ฐานยืดหยุ่น)
+  class2: { A: 2.3, B: 4.5, C: 7.1 },   // Group 2 & 4 (Rigid / ฐานแข็ง)
+  class3: { A: 2.3, B: 4.5, C: 7.1 },   // Group 1 & 3 (Flexible / ฐานยืดหยุ่น)
+  class4: { A: 3.5, B: 7.1, C: 11.0 }   // Group 1 & 3 (Rigid / ฐานแข็ง)
 };
 
 function calculateZone(vrms, mClass) {
